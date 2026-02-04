@@ -21,35 +21,27 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   final _rfcController = TextEditingController();
   final _locationController = TextEditingController();
   double _yearsExperience = 1;
-  Future<void> _openGoogleMaps() async {
-    final double lat = 19.432608;
-    final double lng = -99.133209;
-    
-    final Uri url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
-    
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url);
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo abrir Google Maps'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error al abrir Google Maps: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+  Future<void> _openGoogleMapsApp() async {
+  final double lat = 19.432608;
+  final double lng = -99.133209;
+  
+  // URL específica para la app de Google Maps
+  final String url = 'comgooglemaps://?q=$lat,$lng';
+  // Fallback a la versión web
+  final String fallbackUrl = 'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
+  
+  try {
+    if (await canLaunch(url)) {
+      await launch(url);
+    } else if (await canLaunch(fallbackUrl)) {
+      await launch(fallbackUrl);
+    } else {
+      print('No se puede abrir ningún mapa');
     }
+  } catch (e) {
+    print('Error: $e');
   }
+}
 
   Future<void> _submitProfile() async {
     final baseUrl = dotenv.env['API_BASE_URL'];
@@ -543,7 +535,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                 prefixIcon:
                     Icon(Icons.location_on_outlined, color: Colors.grey[500]),
                 suffixIcon: TextButton(
-                  onPressed: _openGoogleMaps, 
+                  onPressed: _openGoogleMapsApp, 
                   child: Text('Abrir Mapa',
                       style: TextStyle(color: Colors.blue[400], fontSize: 12)),
                 ),
@@ -912,7 +904,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                       prefixIcon: Icon(Icons.location_on_outlined,
                           color: Colors.grey[500]),
                       suffixIcon: TextButton(
-                        onPressed: _openGoogleMaps, 
+                        onPressed: _openGoogleMapsApp, 
                         child: Text('Abrir Mapa',
                             style: TextStyle(
                                 color: Colors.blue[400], fontSize: 13)),

@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../componentes/bottoom_freelancer.dart';
 
 class FreelancerDashboardPage extends StatefulWidget {
   @override
@@ -168,6 +169,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
     }
   }
 
+  // Sidebar solo para DESKTOP
   Widget _buildSidebar() {
     final name = _userData['full_name']?.toString() ?? 'Freelancer';
 
@@ -177,7 +179,6 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
       child: SafeArea(
         child: Column(
           children: [
-            // Logo
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Row(
@@ -212,16 +213,25 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
             Divider(color: Colors.grey[800], height: 1),
             SizedBox(height: 20),
 
-            // Opciones del menú
             _buildMenuItem(
-                Icons.dashboard_outlined, 'Panel', true, () {}),
+                Icons.dashboard_outlined, 'Panel', true, () {
+              Navigator.pushNamed(context, '/freelancer_dashboard');
+                }),
+                _buildMenuItem(
+                Icons.dashboard_outlined, 'Activaciones', true, () {
+              Navigator.pushNamed(context, '/freelancer_jobs');
+                }),
             _buildMenuItem(Icons.person_outline, 'Mi Perfil', false, () {
-
+              Navigator.pushNamed(context, '/freelancer_profile');
             }),
             _buildMenuItem(
-                Icons.event_outlined, 'Mis Eventos', false, () {}),
+                Icons.event_outlined, 'Mis Eventos', false, () {
+              Navigator.pushNamed(context, '/freelancer_events');
+                }),
             _buildMenuItem(
-                Icons.settings_outlined, 'Configuración', false, () {}),
+                Icons.settings_outlined, 'Configuración', false, () {
+              Navigator.pushNamed(context, '/freelancer_settings');
+                }),
 
             Spacer(),
 
@@ -233,7 +243,6 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
               ),
               child: Column(
                 children: [
-                  // Perfil del usuario
                   Row(
                     children: [
                       CircleAvatar(
@@ -264,7 +273,6 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                   ),
                   SizedBox(height: 12),
 
-                  // Botón de cerrar sesión
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -348,7 +356,6 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          
           Row(
             children: [
               CircleAvatar(
@@ -390,14 +397,12 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
           ),
           SizedBox(height: 14),
 
-          // Bio
           Text(bio,
               style: TextStyle(color: Colors.grey[400], fontSize: 14),
               maxLines: 2,
               overflow: TextOverflow.ellipsis),
           SizedBox(height: 16),
 
-          // Chips: años exp, ubicación, RFC
           Row(
             children: [
               Expanded(
@@ -623,6 +628,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
       ),
     );
   }
+
   Widget _buildMetricCard(
       String title, dynamic value, String subtitle, Color color) {
     return Container(
@@ -795,6 +801,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
       ),
     );
   }
+
   Widget _buildHeader(bool isMobile) {
     return Text(
       'Panel Freelancer',
@@ -812,12 +819,14 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      drawer: isMobile
-          ? Drawer(
-              backgroundColor: Color(0xFF161B22),
-              child: _buildSidebar(),
-            )
+      
+      // ============================================================
+      // BOTTOM NAVIGATION (solo en móvil, reemplaza drawer)
+      bottomNavigationBar: isMobile
+          ? FreelancerBottomNav(currentRoute: '/freelancer_dashboard')
           : null,
+      // ============================================================
+      
       body: SafeArea(
         child: _isLoading
             ? Center(
@@ -826,7 +835,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
               )
             : Row(
                 children: [
-                 
+                  // Sidebar solo en desktop
                   if (!isMobile) _buildSidebar(),
 
                   Expanded(
@@ -835,22 +844,9 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          
+                          // Header (sin botón hamburguesa)
                           if (isMobile) ...[
-                            Builder(builder: (context) {
-                              return Row(
-                                children: [
-                                  IconButton(
-                                    icon: Icon(Icons.menu,
-                                        color: Colors.white),
-                                    onPressed: () =>
-                                        Scaffold.of(context).openDrawer(),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Expanded(child: _buildHeader(isMobile)),
-                                ],
-                              );
-                            }),
+                            _buildHeader(isMobile),
                             SizedBox(height: 16),
                           ] else ...[
                             Row(

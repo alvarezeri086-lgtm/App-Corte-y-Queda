@@ -11,6 +11,7 @@ import 'events_details_page.dart';
 import 'edit_event_page.dart';
 import 'create_posicion_page.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../componentes/bottoom_company.dart';
 
 class EventsPage extends StatefulWidget {
   @override
@@ -248,8 +249,11 @@ class _EventsPageState extends State<EventsPage> {
   }
 
   Widget _buildSearchAndFilters() {
+    // Detectar si es móvil
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Color(0xFF161B22),
         borderRadius: BorderRadius.circular(12),
@@ -260,14 +264,14 @@ class _EventsPageState extends State<EventsPage> {
           TextField(
             controller: _searchController,
             onChanged: _onSearchChanged,
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: Colors.white, fontSize: isMobile ? 14 : 16),
             decoration: InputDecoration(
               hintText: 'Buscar eventos...',
-              hintStyle: TextStyle(color: Colors.grey[600]),
-              prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
+              hintStyle: TextStyle(color: Colors.grey[600], fontSize: isMobile ? 14 : 16),
+              prefixIcon: Icon(Icons.search, color: Colors.grey[500], size: isMobile ? 20 : 24),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: Icon(Icons.clear, color: Colors.grey[500]),
+                      icon: Icon(Icons.clear, color: Colors.grey[500], size: isMobile ? 20 : 24),
                       onPressed: () {
                         _searchController.clear();
                         _onSearchChanged('');
@@ -277,7 +281,7 @@ class _EventsPageState extends State<EventsPage> {
               fillColor: Color(0xFF0D1117),
               filled: true,
               contentPadding:
-                  EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: isMobile ? 10 : 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(color: Color(0xFF30363D)),
@@ -292,15 +296,15 @@ class _EventsPageState extends State<EventsPage> {
               ),
             ),
           ),
-          SizedBox(height: 16),
+          SizedBox(height: isMobile ? 12 : 16),
 
           Row(
             children: [
               Text(
                 'Filtrar por estado:',
-                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                style: TextStyle(color: Colors.grey[400], fontSize: isMobile ? 12 : 14),
               ),
-              SizedBox(width: 12),
+              SizedBox(width: isMobile ? 8 : 12),
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -308,7 +312,7 @@ class _EventsPageState extends State<EventsPage> {
                     children: _statusOptions.map((status) {
                       final bool isActive = _statusFilter == status;
                       return Padding(
-                        padding: EdgeInsets.only(right: 8),
+                        padding: EdgeInsets.only(right: 6),
                         child: ChoiceChip(
                           label: Text(
                             status == 'Todos'
@@ -316,7 +320,7 @@ class _EventsPageState extends State<EventsPage> {
                                 : _translateStatus(status),
                             style: TextStyle(
                               color: isActive ? Colors.white : Colors.grey[400],
-                              fontSize: 12,
+                              fontSize: isMobile ? 10 : 12,
                             ),
                           ),
                           selected: isActive,
@@ -336,6 +340,10 @@ class _EventsPageState extends State<EventsPage> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 8 : 12,
+                            vertical: isMobile ? 4 : 6,
+                          ),
                         ),
                       );
                     }).toList(),
@@ -351,11 +359,16 @@ class _EventsPageState extends State<EventsPage> {
 
   Widget _buildNotificationBell() {
     final unreadCount = _notifications.where((n) => !n.isRead).length;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Stack(
       children: [
         IconButton(
-          icon: Icon(Icons.notifications_outlined, color: Colors.white),
+          icon: Icon(
+            Icons.notifications_outlined, 
+            color: Colors.white,
+            size: isMobile ? 22 : 24,
+          ),
           onPressed: () {
             setState(() {
               _showNotifications = !_showNotifications;
@@ -364,20 +377,23 @@ class _EventsPageState extends State<EventsPage> {
         ),
         if (unreadCount > 0)
           Positioned(
-            right: 8,
-            top: 8,
+            right: isMobile ? 6 : 8,
+            top: isMobile ? 6 : 8,
             child: Container(
-              padding: EdgeInsets.all(4),
+              padding: EdgeInsets.all(isMobile ? 2 : 4),
               decoration: BoxDecoration(
                 color: Colors.red,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
               ),
-              constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+              constraints: BoxConstraints(
+                minWidth: isMobile ? 14 : 16, 
+                minHeight: isMobile ? 14 : 16,
+              ),
               child: Text(
                 unreadCount > 9 ? '9+' : '$unreadCount',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 10,
+                  fontSize: isMobile ? 8 : 10,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
@@ -391,12 +407,15 @@ class _EventsPageState extends State<EventsPage> {
   Widget _buildNotificationsPanel() {
     if (!_showNotifications) return SizedBox.shrink();
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Positioned(
-      right: 16,
-      top: 70,
+      right: isMobile ? 8 : 16,
+      top: isMobile ? 60 : 70,
       child: Container(
-        width: 350,
-        height: 400,
+        width: isMobile ? screenWidth * 0.9 : 350,
+        height: isMobile ? 350 : 400,
         decoration: BoxDecoration(
           color: Color(0xFF161B22),
           borderRadius: BorderRadius.circular(12),
@@ -412,7 +431,7 @@ class _EventsPageState extends State<EventsPage> {
         child: Column(
           children: [
             Container(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(isMobile ? 12 : 16),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(color: Color(0xFF30363D), width: 1),
@@ -425,7 +444,7 @@ class _EventsPageState extends State<EventsPage> {
                     'Notificaciones',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: isMobile ? 14 : 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -435,17 +454,17 @@ class _EventsPageState extends State<EventsPage> {
                         TextButton(
                           onPressed: _markAllAsRead,
                           child: Text(
-                            'Marcar todas como leídas',
+                            'Marcar todas',
                             style: TextStyle(
                               color: Colors.blue[400],
-                              fontSize: 12,
+                              fontSize: isMobile ? 10 : 12,
                             ),
                           ),
                         ),
-                      SizedBox(width: 8),
+                      SizedBox(width: isMobile ? 4 : 8),
                       IconButton(
                         icon: Icon(Icons.clear_all,
-                            color: Colors.grey[500], size: 20),
+                            color: Colors.grey[500], size: isMobile ? 18 : 20),
                         onPressed: _clearAllNotifications,
                         tooltip: 'Limpiar todas',
                       ),
@@ -462,11 +481,14 @@ class _EventsPageState extends State<EventsPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.notifications_none,
-                              color: Colors.grey[600], size: 48),
-                          SizedBox(height: 12),
+                              color: Colors.grey[600], size: isMobile ? 40 : 48),
+                          SizedBox(height: isMobile ? 8 : 12),
                           Text(
                             'No hay notificaciones',
-                            style: TextStyle(color: Colors.grey[500]),
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: isMobile ? 14 : 16,
+                            ),
                           ),
                         ],
                       ),
@@ -481,7 +503,7 @@ class _EventsPageState extends State<EventsPage> {
             ),
 
             Container(
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(isMobile ? 10 : 12),
               decoration: BoxDecoration(
                 border: Border(
                   top: BorderSide(color: Color(0xFF30363D), width: 1),
@@ -489,18 +511,21 @@ class _EventsPageState extends State<EventsPage> {
               ),
               child: TextButton(
                 onPressed: () {
-                  
+                  // TODO: Navegar a todas las notificaciones
                 },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       'Ver todas las notificaciones',
-                      style: TextStyle(color: Colors.blue[400]),
+                      style: TextStyle(
+                        color: Colors.blue[400],
+                        fontSize: isMobile ? 12 : 14,
+                      ),
                     ),
-                    SizedBox(width: 4),
+                    SizedBox(width: isMobile ? 2 : 4),
                     Icon(Icons.arrow_forward,
-                        color: Colors.blue[400], size: 16),
+                        color: Colors.blue[400], size: isMobile ? 14 : 16),
                   ],
                 ),
               ),
@@ -512,6 +537,8 @@ class _EventsPageState extends State<EventsPage> {
   }
 
   Widget _buildNotificationItem(NotificationItem notification) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
     Color? iconColor;
     IconData? iconData;
 
@@ -543,21 +570,24 @@ class _EventsPageState extends State<EventsPage> {
             : Colors.transparent,
       ),
       child: ListTile(
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 16, 
+          vertical: isMobile ? 8 : 12,
+        ),
         leading: Container(
-          width: 40,
-          height: 40,
+          width: isMobile ? 36 : 40,
+          height: isMobile ? 36 : 40,
           decoration: BoxDecoration(
             color: iconColor!.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(iconData, color: iconColor, size: 20),
+          child: Icon(iconData, color: iconColor, size: isMobile ? 18 : 20),
         ),
         title: Text(
           notification.title,
           style: TextStyle(
             color: Colors.white,
-            fontSize: 14,
+            fontSize: isMobile ? 13 : 14,
             fontWeight:
                 !notification.isRead ? FontWeight.bold : FontWeight.normal,
           ),
@@ -565,27 +595,33 @@ class _EventsPageState extends State<EventsPage> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: 4),
+            SizedBox(height: isMobile ? 2 : 4),
             Text(
               notification.message,
-              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              style: TextStyle(
+                color: Colors.grey[400], 
+                fontSize: isMobile ? 11 : 12,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            SizedBox(height: 4),
+            SizedBox(height: isMobile ? 2 : 4),
             Text(
               _formatTimeAgo(notification.time),
-              style: TextStyle(color: Colors.grey[500], fontSize: 10),
+              style: TextStyle(
+                color: Colors.grey[500], 
+                fontSize: isMobile ? 9 : 10,
+              ),
             ),
           ],
         ),
         trailing: !notification.isRead
             ? Container(
-                width: 8,
-                height: 8,
+                width: isMobile ? 6 : 8,
+                height: isMobile ? 6 : 8,
                 decoration: BoxDecoration(
                   color: Colors.blue[400],
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(isMobile ? 3 : 4),
                 ),
               )
             : null,
@@ -622,6 +658,8 @@ class _EventsPageState extends State<EventsPage> {
   }
 
   Widget _buildEventCard(Map<String, dynamic> event) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
     final title = event['title']?.toString() ?? 'Sin título';
     final description = event['description']?.toString() ?? '';
     final location = event['location']?.toString() ?? '';
@@ -639,8 +677,8 @@ class _EventsPageState extends State<EventsPage> {
     String statusText = _translateStatus(status);
 
     return Container(
-      margin: EdgeInsets.only(bottom: 16),
-      padding: EdgeInsets.all(20),
+      margin: EdgeInsets.only(bottom: isMobile ? 12 : 16),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Color(0xFF161B22),
         borderRadius: BorderRadius.circular(12),
@@ -657,16 +695,19 @@ class _EventsPageState extends State<EventsPage> {
                   title,
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: isMobile ? 16 : 18,
                     fontWeight: FontWeight.bold,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),
               ),
-              SizedBox(width: 10),
+              SizedBox(width: isMobile ? 8 : 10),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 10 : 12, 
+                  vertical: isMobile ? 4 : 6,
+                ),
                 decoration: BoxDecoration(
                   color: status == 'ACTIVE'
                       ? Colors.green[900]!.withOpacity(0.2)
@@ -685,25 +726,25 @@ class _EventsPageState extends State<EventsPage> {
                     color: status == 'ACTIVE'
                         ? Colors.green[400]
                         : Colors.orange[400],
-                    fontSize: 12,
+                    fontSize: isMobile ? 10 : 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ],
           ),
-          SizedBox(height: 8),
+          SizedBox(height: isMobile ? 6 : 8),
           if (description.isNotEmpty) ...[
             Text(
               description,
               style: TextStyle(
                 color: Colors.grey[400],
-                fontSize: 14,
+                fontSize: isMobile ? 13 : 14,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            SizedBox(height: 8),
+            SizedBox(height: isMobile ? 6 : 8),
           ],
           if (location.isNotEmpty) ...[
             Row(
@@ -712,15 +753,15 @@ class _EventsPageState extends State<EventsPage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Icon(Icons.location_on_outlined,
-                      color: Colors.grey[500], size: 16),
+                      color: Colors.grey[500], size: isMobile ? 14 : 16),
                 ),
-                SizedBox(width: 4),
+                SizedBox(width: isMobile ? 3 : 4),
                 Expanded(
                   child: Text(
                     location,
                     style: TextStyle(
                       color: Colors.grey[400],
-                      fontSize: 13,
+                      fontSize: isMobile ? 12 : 13,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -728,25 +769,25 @@ class _EventsPageState extends State<EventsPage> {
                 ),
               ],
             ),
-            SizedBox(height: 8),
+            SizedBox(height: isMobile ? 6 : 8),
           ],
           if (startDate != null) ...[
             Row(
               children: [
                 Icon(Icons.calendar_today_outlined,
-                    color: Colors.grey[500], size: 16),
-                SizedBox(width: 4),
+                    color: Colors.grey[500], size: isMobile ? 14 : 16),
+                SizedBox(width: isMobile ? 3 : 4),
                 Text(
                   DateFormat('dd/MM/yyyy').format(startDate),
                   style: TextStyle(
                     color: Colors.grey[400],
-                    fontSize: 13,
+                    fontSize: isMobile ? 12 : 13,
                   ),
                 ),
               ],
             ),
           ],
-          SizedBox(height: 16),
+          SizedBox(height: isMobile ? 12 : 16),
           Row(
             children: [
               Expanded(
@@ -761,24 +802,27 @@ class _EventsPageState extends State<EventsPage> {
                     );
                   },
                   style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16, 
+                      vertical: isMobile ? 8 : 10,
+                    ),
                     side: BorderSide(color: Colors.blue[600]!, width: 1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
                   icon: Icon(Icons.visibility_outlined,
-                      color: Colors.blue[400], size: 16),
+                      color: Colors.blue[400], size: isMobile ? 14 : 16),
                   label: Text(
                     'Detalles',
                     style: TextStyle(
                       color: Colors.blue[400],
-                      fontSize: 14,
+                      fontSize: isMobile ? 13 : 14,
                     ),
                   ),
                 ),
               ),
-              SizedBox(width: 12),
+              SizedBox(width: isMobile ? 8 : 12),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
@@ -795,26 +839,29 @@ class _EventsPageState extends State<EventsPage> {
                     });
                   },
                   style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16, 
+                      vertical: isMobile ? 8 : 10,
+                    ),
                     side: BorderSide(color: Colors.grey[600]!, width: 1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
                   icon: Icon(Icons.edit_outlined,
-                      color: Colors.grey[400], size: 16),
+                      color: Colors.grey[400], size: isMobile ? 14 : 16),
                   label: Text(
                     'Editar',
                     style: TextStyle(
                       color: Colors.grey[400],
-                      fontSize: 14,
+                      fontSize: isMobile ? 13 : 14,
                     ),
                   ),
                 ),
               ),
             ],
           ),
-          SizedBox(height: 12),
+          SizedBox(height: isMobile ? 10 : 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -834,7 +881,10 @@ class _EventsPageState extends State<EventsPage> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue[600],
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 16 : 20, 
+                  vertical: isMobile ? 10 : 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(6),
                 ),
@@ -844,7 +894,7 @@ class _EventsPageState extends State<EventsPage> {
                 'Generar posición',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: isMobile ? 13 : 14,
                 ),
               ),
             ),
@@ -869,322 +919,210 @@ class _EventsPageState extends State<EventsPage> {
     }
   }
 
-  Widget _buildSidebar(Map<String, dynamic>? userData) {
-    return Container(
-      width: 240,
-      color: Color(0xFF161B22),
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.blue[600],
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(Icons.connect_without_contact,
-                        color: Colors.white, size: 20),
-                  ),
-                  SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Corte y Queda',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
-                      Text('SISTEMA OPERATIVO OPERACIONAL',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 9)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Divider(color: Colors.grey[800], height: 1),
-            SizedBox(height: 20),
-            _buildMenuItem(Icons.dashboard_outlined, 'Panel', false),
-            _buildMenuItem(Icons.bolt_outlined, 'Activaciones', false),
-            _buildMenuItem(Icons.event_outlined, 'Eventos', true),
-            _buildMenuItem(Icons.people_outline, 'Red / Historial', false),
-            _buildMenuItem(Icons.settings_outlined, 'Configuración', false),
-            Spacer(),
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border:
-                    Border(top: BorderSide(color: Colors.grey[800]!, width: 1)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey[700],
-                        child: userData?['photo'] != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Image.network(
-                                  userData!['photo'],
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Icon(Icons.person,
-                                          color: Colors.white, size: 18),
-                                ),
-                              )
-                            : Icon(Icons.person, color: Colors.white, size: 18),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              userData?['organization']?['trade_name']
-                                      ?.toString() ??
-                                  'Organización',
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text('Acceso Administrador',
-                                style: TextStyle(
-                                    color: Colors.grey[500], fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _logout,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[900]!.withOpacity(0.2),
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        side: BorderSide(color: Colors.red[700]!),
-                        elevation: 0,
-                      ),
-                      icon:
-                          Icon(Icons.logout, color: Colors.red[400], size: 16),
-                      label: Text(
-                        'Cerrar Sesión',
-                        style: TextStyle(
-                          color: Colors.red[400],
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(IconData icon, String title, bool isActive) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color:
-            isActive ? Color(0xFF1F6FEB).withOpacity(0.15) : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        border: isActive
-            ? Border.all(color: Color(0xFF1F6FEB).withOpacity(0.4), width: 1)
-            : null,
-      ),
-      child: ListTile(
-        dense: true,
-        leading: Icon(icon,
-            color: isActive ? Colors.blue[400] : Colors.grey[500], size: 20),
-        title: Text(title,
-            style: TextStyle(
-                color: isActive ? Colors.blue[300] : Colors.grey[400],
-                fontSize: 13,
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.normal)),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-        onTap: () {
-          if (title == 'Panel') {
-            Navigator.pop(context); 
-          }
-          if (title == 'Eventos') {
-            Navigator.pushNamed(context, '/events');
-          }
-          if (title == 'Activaciones') {
-            Navigator.pushNamed(context, '/activations');
-          }
-          if (title == 'Configuración') {
-            Navigator.pushNamed(context, '/settings');
-          }
-          if (title == 'Red / Historial') {
-            Navigator.pushNamed(context, '/history');
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _buildHeader(bool isMobile) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          'Mis Eventos',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: isMobile ? 20 : 28,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        if (!isMobile)
-          Row(
-            children: [
-              _buildNotificationBell(),
-              SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _navigateToCreateEvent,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[600],
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                icon: Icon(Icons.add, color: Colors.white, size: 18),
-                label: Text(
-                  'Nuevo Evento',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final userData = authProvider.userInfo;
-    final isMobile = MediaQuery.of(context).size.width < 900;
+    
+    // Detectar si es móvil
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      drawer: isMobile
-          ? Drawer(
-              backgroundColor: Color(0xFF161B22),
-              child: _buildSidebar(userData),
-            )
-          : null,
-      floatingActionButton: isMobile
-          ? FloatingActionButton(
-              onPressed: _navigateToCreateEvent,
-              backgroundColor: Colors.blue[600],
-              child: Icon(Icons.add, color: Colors.white),
-            )
-          : null,
       body: SafeArea(
         child: Stack(
           children: [
-            Row(
+            Column(
               children: [
-                if (!isMobile) _buildSidebar(userData),
+                // Header principal con logo - Fijo
+                Container(
+                  padding: EdgeInsets.all(isMobile ? 12 : 16),
+                  color: Color(0xFF161B22),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Logo y título
+                      Row(
+                        children: [
+                          Container(
+                            width: isMobile ? 28 : 32,
+                            height: isMobile ? 28 : 32,
+                            decoration: BoxDecoration(
+                              color: Colors.blue[600],
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(Icons.connect_without_contact,
+                                color: Colors.white, 
+                                size: isMobile ? 16 : 20),
+                          ),
+                          SizedBox(width: isMobile ? 8 : 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Corte y Queda',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: isMobile ? 14 : 16,
+                                      fontWeight: FontWeight.bold)),
+                              Text('SISTEMA OPERATIVO OPERACIONAL',
+                                  style: TextStyle(
+                                      color: Colors.grey[600], 
+                                      fontSize: isMobile ? 7 : 9)),
+                            ],
+                          ),
+                        ],
+                      ),
+                      
+                      // Botones del header
+                      Row(
+                        children: [
+                          _buildNotificationBell(),
+                          SizedBox(width: isMobile ? 8 : 12),
+                          // Botón Nuevo Evento adaptado para móvil
+                          isMobile
+                              ? IconButton(
+                                  onPressed: _navigateToCreateEvent,
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.blue[600],
+                                    padding: EdgeInsets.all(8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                  icon: Icon(Icons.add, 
+                                      color: Colors.white, 
+                                      size: 20),
+                                )
+                              : ElevatedButton.icon(
+                                  onPressed: _navigateToCreateEvent,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue[600],
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                  icon: Icon(Icons.add, 
+                                      color: Colors.white, 
+                                      size: 18),
+                                  label: Text(
+                                    'Nuevo Evento',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // CONTENIDO PRINCIPAL DESPLAZABLE
                 Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.all(isMobile ? 16 : 32),
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(isMobile ? 12 : 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (isMobile) ...[
-                          Builder(builder: (context) {
-                            return Row(
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.menu, color: Colors.white),
-                                  onPressed: () =>
-                                      Scaffold.of(context).openDrawer(),
-                                ),
-                                SizedBox(width: 8),
-                                Expanded(child: _buildHeader(isMobile)),
-                                if (isMobile) _buildNotificationBell(),
-                              ],
-                            );
-                          }),
-                          SizedBox(height: 16),
-                        ] else ...[
-                          _buildHeader(isMobile),
-                          SizedBox(height: 24),
-                        ],
+                        // Título de la página - Desplazable
+                        Text(
+                          'Mis Eventos',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isMobile ? 20 : 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: isMobile ? 6 : 8),
+                        
+                        // Descripción - Desplazable
+                        Text(
+                          'Gestiona todos tus eventos, revisa detalles y crea nuevas posiciones de trabajo.',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: isMobile ? 13 : 14,
+                          ),
+                        ),
+                        SizedBox(height: isMobile ? 16 : 20),
+                        
+                        // Búsqueda y filtros - Desplazable
                         _buildSearchAndFilters(),
-                        SizedBox(height: 20),
+                        SizedBox(height: isMobile ? 16 : 20),
 
+                        // Contador de eventos - Desplazable
                         Text(
                           '${_filteredEvents.length} evento${_filteredEvents.length != 1 ? 's' : ''} encontrado${_filteredEvents.length != 1 ? 's' : ''}',
                           style: TextStyle(
                             color: Colors.grey[400],
-                            fontSize: 14,
+                            fontSize: isMobile ? 13 : 14,
                           ),
                         ),
-                        SizedBox(height: 16),
+                        SizedBox(height: isMobile ? 12 : 16),
 
+                        // CONTENIDO PRINCIPAL (eventos)
                         if (_isLoading)
-                          Expanded(
+                          Container(
+                            height: 200,
                             child: Center(
                               child: CircularProgressIndicator(
                                   color: Colors.blue[600]),
                             ),
                           )
                         else if (_errorMessage.isNotEmpty)
-                          Expanded(
+                          Container(
+                            padding: EdgeInsets.symmetric(vertical: 40),
                             child: Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(Icons.error_outline,
-                                      color: Colors.red[400], size: 48),
-                                  SizedBox(height: 16),
+                                      color: Colors.red[400], 
+                                      size: isMobile ? 40 : 48),
+                                  SizedBox(height: 12),
                                   Text(
                                     _errorMessage,
-                                    style: TextStyle(color: Colors.grey[400]),
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: isMobile ? 14 : 16,
+                                    ),
                                     textAlign: TextAlign.center,
                                   ),
-                                  SizedBox(height: 16),
+                                  SizedBox(height: 12),
                                   ElevatedButton(
                                     onPressed: _loadEvents,
-                                    child: Text('Reintentar'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue[600],
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 10,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Reintentar',
+                                      style: TextStyle(fontSize: isMobile ? 14 : 16),
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                           )
                         else if (_filteredEvents.isEmpty)
-                          Expanded(
+                          Container(
+                            padding: EdgeInsets.symmetric(vertical: 40),
                             child: Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(Icons.search_off,
-                                      color: Colors.grey[600], size: 64),
-                                  SizedBox(height: 16),
+                                      color: Colors.grey[600], 
+                                      size: isMobile ? 48 : 64),
+                                  SizedBox(height: 12),
                                   Text(
                                     _searchQuery.isNotEmpty ||
                                             _statusFilter != 'Todos'
@@ -1192,10 +1130,11 @@ class _EventsPageState extends State<EventsPage> {
                                         : 'No hay eventos creados',
                                     style: TextStyle(
                                       color: Colors.grey[400],
-                                      fontSize: 16,
+                                      fontSize: isMobile ? 14 : 16,
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
-                                  SizedBox(height: 8),
+                                  SizedBox(height: 6),
                                   Text(
                                     _searchQuery.isNotEmpty ||
                                             _statusFilter != 'Todos'
@@ -1203,33 +1142,63 @@ class _EventsPageState extends State<EventsPage> {
                                         : 'Crea tu primer evento para comenzar',
                                     style: TextStyle(
                                       color: Colors.grey[500],
-                                      fontSize: 14,
+                                      fontSize: isMobile ? 12 : 14,
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
+                                  SizedBox(height: 16),
+                                  // Botón para crear evento cuando no hay eventos
+                                  if (_events.isEmpty)
+                                    ElevatedButton.icon(
+                                      onPressed: _navigateToCreateEvent,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue[600],
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 20,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                      ),
+                                      icon: Icon(Icons.add, 
+                                          color: Colors.white, 
+                                          size: 18),
+                                      label: Text(
+                                        'Crear Primer Evento',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
                           )
                         else
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: _filteredEvents.map<Widget>((event) {
-                                  if (event is Map<String, dynamic>) {
-                                    return _buildEventCard(event);
-                                  }
-                                  return SizedBox.shrink();
-                                }).toList(),
-                              ),
-                            ),
+                          Column(
+                            children: _filteredEvents.map<Widget>((event) {
+                              if (event is Map<String, dynamic>) {
+                                return _buildEventCard(event);
+                              }
+                              return SizedBox.shrink();
+                            }).toList(),
                           ),
+                        
+                        // Espacio adicional al final para evitar que se pegue al nav
+                        SizedBox(height: 20),
                       ],
                     ),
                   ),
                 ),
+                
+                // Navegación inferior - Fija
+                CompanyBottomNav(currentRoute: '/events'),
               ],
             ),
             
+            // Panel de notificaciones
             _buildNotificationsPanel(),
           ],
         ),

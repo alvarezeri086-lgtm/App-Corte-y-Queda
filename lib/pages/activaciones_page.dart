@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../componentes/bottoom_company.dart';
 
 class ActivationsPage extends StatefulWidget {
   @override
@@ -110,9 +111,7 @@ class _ActivationsPageState extends State<ActivationsPage> {
 
   Future<void> _loadPositionsAlternative() async {
     setState(() {
-      _positions = [
-      
-      ];
+      _positions = [];
       _isLoading = false;
     });
   }
@@ -172,6 +171,7 @@ class _ActivationsPageState extends State<ActivationsPage> {
         return Colors.grey[400]!;
     }
   }
+  
   Future<void> _logout() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
@@ -204,178 +204,6 @@ class _ActivationsPageState extends State<ActivationsPage> {
       await authProvider.logout();
       Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     }
-  }
-
-  Widget _buildSidebar(Map<String, dynamic>? userData) {
-    return Container(
-      width: 240,
-      color: Color(0xFF161B22),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Logo
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.blue[600],
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(Icons.connect_without_contact,
-                        color: Colors.white, size: 20),
-                  ),
-                  SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Corte y Queda',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
-                      Text('SISTEMA OPERATIVO OPERACIONAL',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 9)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Divider(color: Colors.grey[800], height: 1),
-            SizedBox(height: 20),
-
-            _buildMenuItem(Icons.dashboard_outlined, 'Panel', false, () {
-              Navigator.pushReplacementNamed(context, '/company_dashboard');
-            }),
-            _buildMenuItem(Icons.bolt_outlined, 'Activaciones', true, () {
-            }),
-            _buildMenuItem(Icons.event_outlined, 'Eventos', false, () {
-              Navigator.pushNamed(context, '/events');
-            }),
-            _buildMenuItem(Icons.people_outline, 'Red / Historial', false, () {
-              Navigator.pushNamed(context, '/company-history');
-            }),
-            _buildMenuItem(Icons.settings_outlined, 'Configuración', false,
-                () {
-              Navigator.pushNamed(context, '/company-settings');
-            }),
-
-            Spacer(),
-
-            // Footer del sidebar
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border:
-                    Border(top: BorderSide(color: Colors.grey[800]!, width: 1)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey[700],
-                        child: userData?['photo'] != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Image.network(
-                                  userData!['photo'],
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Icon(Icons.person,
-                                          color: Colors.white, size: 18),
-                                ),
-                              )
-                            : Icon(Icons.person, color: Colors.white, size: 18),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              userData?['organization']?['trade_name']
-                                      ?.toString() ??
-                                  userData?['company_name']?.toString() ??
-                                  'Impacto creativo',
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text('Acceso Administrador',
-                                style: TextStyle(
-                                    color: Colors.grey[500], fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _logout,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[900]!.withOpacity(0.2),
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        side: BorderSide(color: Colors.red[700]!),
-                        elevation: 0,
-                      ),
-                      icon:
-                          Icon(Icons.logout, color: Colors.red[400], size: 16),
-                      label: Text(
-                        'Cerrar Sesión',
-                        style: TextStyle(
-                          color: Colors.red[400],
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(
-      IconData icon, String title, bool isActive, VoidCallback onTap) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color:
-            isActive ? Color(0xFF1F6FEB).withOpacity(0.15) : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        border: isActive
-            ? Border.all(color: Color(0xFF1F6FEB).withOpacity(0.4), width: 1)
-            : null,
-      ),
-      child: ListTile(
-        dense: true,
-        leading: Icon(icon,
-            color: isActive ? Colors.blue[400] : Colors.grey[500], size: 20),
-        title: Text(title,
-            style: TextStyle(
-                color: isActive ? Colors.blue[300] : Colors.grey[400],
-                fontSize: 13,
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.normal)),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-        onTap: onTap,
-      ),
-    );
   }
 
   Widget _buildPositionCard(Map<String, dynamic> position) {
@@ -545,25 +373,59 @@ class _ActivationsPageState extends State<ActivationsPage> {
       ),
     );
   }
+  
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final userData = authProvider.userInfo;
-    final isMobile = MediaQuery.of(context).size.width < 900;
-
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      drawer: isMobile
-          ? Drawer(
-              backgroundColor: Color(0xFF161B22),
-              child: _buildSidebar(userData),
-            )
-          : null,
       body: SafeArea(
-        child: Row(
+        child: Column(
           children: [
-            if (!isMobile) _buildSidebar(userData),
-
+            // Header principal
+            Container(
+              padding: EdgeInsets.all(16),
+              color: Color(0xFF161B22),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.blue[600],
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(Icons.connect_without_contact,
+                            color: Colors.white, size: 20),
+                      ),
+                      SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Corte y Queda',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold)),
+                          Text('SISTEMA OPERATIVO OPERACIONAL',
+                              style:
+                                  TextStyle(color: Colors.grey[600], fontSize: 9)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.refresh, color: Colors.white),
+                    onPressed: _loadPositions,
+                    tooltip: 'Refrescar',
+                  ),
+                ],
+              ),
+            ),
+            
             Expanded(
               child: _isLoading
                   ? Center(
@@ -594,66 +456,20 @@ class _ActivationsPageState extends State<ActivationsPage> {
                           ),
                         )
                       : SingleChildScrollView(
-                          padding: EdgeInsets.all(isMobile ? 16 : 32),
+                          padding: EdgeInsets.all(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                             
-                              if (isMobile) ...[
-                                Builder(builder: (context) {
-                                  return Row(
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(Icons.menu,
-                                            color: Colors.white),
-                                        onPressed: () =>
-                                            Scaffold.of(context).openDrawer(),
-                                      ),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Posiciones activas',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(Icons.refresh,
-                                            color: Colors.white),
-                                        onPressed: _loadPositions,
-                                        tooltip: 'Refrescar',
-                                      ),
-                                    ],
-                                  );
-                                }),
-                                SizedBox(height: 16),
-                              ] else ...[
-                                // Header desktop
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Posiciones activas',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: Icon(Icons.refresh,
-                                          color: Colors.white),
-                                      onPressed: _loadPositions,
-                                      tooltip: 'Refrescar',
-                                    ),
-                                  ],
+                              // Título
+                              Text(
+                                'Posiciones activas',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                SizedBox(height: 8),
-                              ],
+                              ),
+                              SizedBox(height: 8),
 
                               // Descripción
                               Text(
@@ -686,6 +502,7 @@ class _ActivationsPageState extends State<ActivationsPage> {
                               ),
                               SizedBox(height: 24),
 
+                              // Contador de posiciones
                               Text(
                                 '${_filteredPositions.length} posiciones encontradas',
                                 style: TextStyle(
@@ -695,6 +512,7 @@ class _ActivationsPageState extends State<ActivationsPage> {
                               ),
                               SizedBox(height: 16),
 
+                              // Lista de posiciones o mensaje vacío
                               if (_filteredPositions.isEmpty)
                                 Container(
                                   padding: EdgeInsets.all(48),
@@ -745,6 +563,9 @@ class _ActivationsPageState extends State<ActivationsPage> {
                           ),
                         ),
             ),
+            
+            // Navegación inferior
+            CompanyBottomNav(currentRoute: '/activations'),
           ],
         ),
       ),

@@ -137,7 +137,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
         "location": _locationController.text.trim(),
         "requires_documents": _requiresDocuments,
         "requires_interview": _requiresInterview,
-        "payment_terms_days": _paymentTermsController.text.trim(),
+        "payment_terms_days": int.tryParse(_paymentTermsController.text.trim()) ?? 0,
       };
 
       print(' CREANDO EVENTO ...');

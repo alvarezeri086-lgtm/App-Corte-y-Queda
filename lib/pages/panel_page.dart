@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../componentes/bottoom_company.dart';
 
 class CompanyDashboardPage extends StatefulWidget {
   @override
@@ -14,10 +15,17 @@ class CompanyDashboardPage extends StatefulWidget {
 
 class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   bool _isLoading = true;
-  Map<String, dynamic> _dashboardData = {};
+  Map<String, dynamic> _dashboardData = {
+    'total_projects': 0,
+    'active_events': 0,
+    'filled_positions': 0,
+    'total_positions': 0,
+    'unique_freelancers': 0,
+  };
   List<Map<String, dynamic>> _recentEvents = [];
   int _pendingActivations = 0;
   Map<String, dynamic> _userData = {};
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -26,16 +34,10 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   }
 
   Future<void> _loadDashboardData() async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) {
-      setState(() {
-        _isLoading = false;
-      });
-      return;
-    }
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
 
     try {
       await Future.wait([
@@ -45,6 +47,9 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       ]);
     } catch (e) {
       print('Error loading dashboard: $e');
+      setState(() {
+        _errorMessage = 'Error al cargar datos';
+      });
     } finally {
       setState(() {
         _isLoading = false;
@@ -60,21 +65,26 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     if (token == null || baseUrl == null) return;
 
     try {
+      print('Loading user data from: $baseUrl/users/me');
       final response = await http.get(
-        Uri.parse('$baseUrl/user/me'),
+        Uri.parse('$baseUrl/users/me'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       );
 
+      print('User data response: ${response.statusCode}');
+      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('User data loaded: $data');
+        
         setState(() {
           _userData = data;
         });
       } else {
-        print('Error loading user data: ${response.statusCode}');
+        print('Error loading user data: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Error loading user data: $e');
@@ -89,6 +99,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     if (token == null || baseUrl == null) return;
 
     try {
+      print('Loading dashboard from: $baseUrl/dashboard/organization');
       final response = await http.get(
         Uri.parse('$baseUrl/dashboard/organization'),
         headers: {
@@ -97,15 +108,40 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         },
       );
 
+      print('Dashboard response: ${response.statusCode}');
+      print('Dashboard body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('Dashboard data parsed: $data');
+        
+        // Procesar diferentes estructuras de respuesta
+        Map<String, dynamic> processedData = {};
+        
+        // Intenta extraer datos de diferentes estructuras posibles
+        if (data is Map<String, dynamic>) {
+          // Caso 1: Datos directos
+          if (data.containsKey('total_projects') || data.containsKey('projects')) {
+            processedData = _extractDashboardData(data);
+          }
+          // Caso 2: Datos anidados en una clave
+          else if (data.containsKey('dashboard')) {
+            processedData = _extractDashboardData(data['dashboard']);
+          }
+          // Caso 3: Datos en data/items
+          else if (data.containsKey('data')) {
+            processedData = _extractDashboardData(data['data']);
+          }
+        }
         
         setState(() {
-          _dashboardData = data;
+          _dashboardData = processedData;
           _pendingActivations = _parsePendingActivations(data);
         });
+        
+        print('Processed dashboard data: $_dashboardData');
       } else {
-        print('Error loading organization dashboard: ${response.statusCode}');
+        print('Error loading dashboard: ${response.statusCode}');
         print('Response body: ${response.body}');
       }
     } catch (e) {
@@ -113,19 +149,74 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     }
   }
 
+  Map<String, dynamic> _extractDashboardData(Map<String, dynamic> data) {
+    return {
+      'total_projects': data['total_projects'] ?? 
+                       data['projects'] ?? 
+                       data['total_projects_count'] ?? 
+                       data['projects_count'] ?? 0,
+      'active_events': data['active_events'] ?? 
+                      data['active_events_count'] ?? 
+                      data['events_active'] ?? 
+                      data['activeEvents'] ?? 0,
+      'filled_positions': data['filled_positions'] ?? 
+                         data['positions_filled'] ?? 
+                         data['filledPositions'] ?? 
+                         data['positions_filled_count'] ?? 0,
+      'total_positions': data['total_positions'] ?? 
+                        data['positions_total'] ?? 
+                        data['totalPositions'] ?? 
+                        data['positions_total_count'] ?? 0,
+      'unique_freelancers': data['unique_freelancers'] ?? 
+                           data['freelancers_unique'] ?? 
+                           data['uniqueFreelancers'] ?? 
+                           data['freelancers_unique_count'] ?? 0,
+    };
+  }
+
   int _parsePendingActivations(Map<String, dynamic> data) {
     try {
-      if (data['pending_activations'] != null) {
-        return data['pending_activations'] is int ? data['pending_activations'] : 0;
+      // Prueba diferentes estructuras posibles
+      final dynamicData = data;
+      
+      // Buscar en diferentes niveles
+      List<String> possiblePaths = [
+        'pending_activations',
+        'activations_pending',
+        'pending.activations',
+        'activations.pending',
+        'pending_count',
+        'pendingActivations',
+      ];
+      
+      for (var path in possiblePaths) {
+        if (path.contains('.')) {
+          final parts = path.split('.');
+          dynamic current = dynamicData;
+          bool found = true;
+          
+          for (var part in parts) {
+            if (current is Map<String, dynamic> && current.containsKey(part)) {
+              current = current[part];
+            } else {
+              found = false;
+              break;
+            }
+          }
+          
+          if (found && current != null && current is int) {
+            return current;
+          }
+        } else if (dynamicData is Map<String, dynamic> && 
+                   dynamicData.containsKey(path) && 
+                   dynamicData[path] is int) {
+          return dynamicData[path];
+        }
       }
-      if (data['activations_pending'] != null) {
-        return data['activations_pending'] is int ? data['activations_pending'] : 0;
-      }
-      if (data['pending'] != null && data['pending']['activations'] != null) {
-        return data['pending']['activations'] is int ? data['pending']['activations'] : 0;
-      }
+      
       return 0;
     } catch (e) {
+      print('Error parsing pending activations: $e');
       return 0;
     }
   }
@@ -138,40 +229,91 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     if (token == null || baseUrl == null) return;
 
     try {
+      print('Loading recent events from: $baseUrl/events/?limit=4&status=ACTIVE');
       final response = await http.get(
-        Uri.parse('$baseUrl/events/?limit=4&status=ACTIVE'),
+        Uri.parse('$baseUrl/events/my-events/?limit=4&status=ACTIVE'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       );
 
+      print('Events response: ${response.statusCode}');
+      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('Events data: $data');
+        
         List<dynamic> eventsList = [];
         
+        // Procesar diferentes estructuras de respuesta
         if (data is List) {
           eventsList = data;
-        } else if (data is Map) {
-          if (data['items'] is List) eventsList = data['items'];
-          else if (data['data'] is List) eventsList = data['data'];
-          else if (data['results'] is List) eventsList = data['results'];
-          else if (data['events'] is List) eventsList = data['events'];
+        } else if (data is Map<String, dynamic>) {
+          if (data['items'] is List) {
+            eventsList = data['items'];
+          } else if (data['data'] is List) {
+            eventsList = data['data'];
+          } else if (data['results'] is List) {
+            eventsList = data['results'];
+          } else if (data['events'] is List) {
+            eventsList = data['events'];
+          } else if (data['my_events'] is List) {
+            eventsList = data['my_events'];
+          }
+          
+          // Si no hay lista específica, buscar cualquier lista
+          if (eventsList.isEmpty) {
+            data.forEach((key, value) {
+              if (value is List && eventsList.isEmpty) {
+                eventsList = value;
+              }
+            });
+          }
         }
 
         setState(() {
           _recentEvents = eventsList.map<Map<String, dynamic>>((event) {
+            DateTime? startDate;
+            DateTime? endDate;
+            
+            if (event['start_date'] != null) {
+              try {
+                startDate = DateTime.parse(event['start_date'].toString());
+              } catch (e) {
+                print('Error parsing start date: $e');
+              }
+            }
+            
+            if (event['end_date'] != null) {
+              try {
+                endDate = DateTime.parse(event['end_date'].toString());
+              } catch (e) {
+                print('Error parsing end date: $e');
+              }
+            }
+
             return {
               'id': event['id']?.toString() ?? '',
-              'title': event['title']?.toString() ?? 'Sin título',
-              'start_date': event['start_date']?.toString(),
-              'end_date': event['end_date']?.toString(),
-              'location': event['location']?.toString() ?? 'Sin ubicación',
+              'title': event['title']?.toString() ?? 
+                      event['name']?.toString() ?? 
+                      'Sin título',
+              'start_date': startDate,
+              'end_date': endDate,
+              'location': event['location']?.toString() ?? 
+                         event['venue']?.toString() ?? 
+                         'Sin ubicación',
               'status': event['status']?.toString() ?? 'INACTIVE',
-              'vacancies': event['vacancies'] ?? 0,
+              'vacancies': event['vacancies'] ?? 
+                          event['available_positions'] ?? 
+                          event['positions_count'] ?? 0,
             };
           }).toList();
         });
+        
+        print('Loaded ${_recentEvents.length} recent events');
+      } else {
+        print('Error loading events: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Error loading recent events: $e');
@@ -217,177 +359,6 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       await authProvider.logout();
       Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     }
-  }
-
-  Widget _buildSidebar(Map<String, dynamic>? userData) {
-    return Container(
-      width: 240,
-      color: Color(0xFF161B22),
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.blue[600],
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(Icons.connect_without_contact,
-                        color: Colors.white, size: 20),
-                  ),
-                  SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Corte y Queda',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
-                      Text('SISTEMA OPERATIVO OPERACIONAL',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 9)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Divider(color: Colors.grey[800], height: 1),
-            SizedBox(height: 20),
-            
-            // Opciones del menú
-            _buildMenuItem(Icons.dashboard_outlined, 'Panel', true, () {
-              Navigator.pushNamed(context, '/company-dashboard');
-            }),
-            _buildMenuItem(Icons.bolt_outlined, 'Activaciones', false, () {
-              Navigator.pushNamed(context, '/activations');
-            }),
-            _buildMenuItem(Icons.event_outlined, 'Eventos', false, () {
-              Navigator.pushNamed(context, '/events');
-            }),
-            _buildMenuItem(Icons.people_outline, 'Red / Historial', false, () {
-              Navigator.pushNamed(context, '/company-history');
-            }),
-            _buildMenuItem(Icons.settings_outlined, 'Configuración', false, () {
-              Navigator.pushNamed(context, '/company-settings');
-            }),
-            
-            Spacer(),
-            
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border:
-                    Border(top: BorderSide(color: Colors.grey[800]!, width: 1)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey[700],
-                        child: userData?['photo'] != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Image.network(
-                                  userData!['photo'],
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Icon(Icons.person,
-                                          color: Colors.white, size: 18),
-                                ),
-                              )
-                            : Icon(Icons.person, color: Colors.white, size: 18),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              userData?['organization']?['trade_name']
-                                      ?.toString() ??
-                                  userData?['company_name']?.toString() ??
-                                  'Impacto creativo',
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text('Acceso Administrador',
-                                style: TextStyle(
-                                    color: Colors.grey[500], fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _logout,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[900]!.withOpacity(0.2),
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        side: BorderSide(color: Colors.red[700]!),
-                        elevation: 0,
-                      ),
-                      icon:
-                          Icon(Icons.logout, color: Colors.red[400], size: 16),
-                      label: Text(
-                        'Cerrar Sesión',
-                        style: TextStyle(
-                          color: Colors.red[400],
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(IconData icon, String title, bool isActive, VoidCallback onTap) {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color:
-            isActive ? Color(0xFF1F6FEB).withOpacity(0.15) : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        border: isActive
-            ? Border.all(color: Color(0xFF1F6FEB).withOpacity(0.4), width: 1)
-            : null,
-      ),
-      child: ListTile(
-        dense: true,
-        leading: Icon(icon,
-            color: isActive ? Colors.blue[400] : Colors.grey[500], size: 20),
-        title: Text(title,
-            style: TextStyle(
-                color: isActive ? Colors.blue[300] : Colors.grey[400],
-                fontSize: 13,
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.normal)),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-        onTap: onTap,
-      ),
-    );
   }
 
   Widget _buildMetricCard(String title, dynamic value, String subtitle, Color color) {
@@ -450,6 +421,14 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                 style: TextStyle(
                   color: Colors.grey[400],
                   fontSize: 16,
+                ),
+              ),
+              SizedBox(height: 8),
+              TextButton(
+                onPressed: _loadDashboardData,
+                child: Text(
+                  'Reintentar carga',
+                  style: TextStyle(color: Colors.blue[400]),
                 ),
               ),
             ],
@@ -528,13 +507,16 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
             ),
           ],
           rows: _recentEvents.map((event) {
-            final startDate = event['start_date'] != null
-                ? DateFormat('dd MMM').format(DateTime.parse(event['start_date']))
-                : 'N/A';
-            final endDate = event['end_date'] != null
-                ? DateFormat('dd MMM').format(DateTime.parse(event['end_date']))
-                : 'N/A';
-            final dateRange = '$startDate - $endDate';
+            String dateRange = 'N/A';
+            if (event['start_date'] != null && event['start_date'] is DateTime) {
+              final startDate = DateFormat('dd MMM').format(event['start_date'] as DateTime);
+              if (event['end_date'] != null && event['end_date'] is DateTime) {
+                final endDate = DateFormat('dd MMM').format(event['end_date'] as DateTime);
+                dateRange = '$startDate - $endDate';
+              } else {
+                dateRange = startDate;
+              }
+            }
             
             final vacancies = event['vacancies'] ?? 0;
             final urgencyText = vacancies > 0 ? '$vacancies Vacantes' : 'Cubierto';
@@ -613,70 +595,116 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
     );
   }
 
-  Widget _buildHeader(bool isMobile) {
-    return Text(
-      'Panel de la empresa',
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: isMobile ? 20 : 28,
-        fontWeight: FontWeight.bold,
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      color: Color(0xFF161B22),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.blue[600],
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(Icons.connect_without_contact,
+                    color: Colors.white, size: 20),
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Corte y Queda',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold)),
+                  Text('SISTEMA OPERATIVO OPERACIONAL',
+                      style:
+                          TextStyle(color: Colors.grey[600], fontSize: 9)),
+                ],
+              ),
+            ],
+          ),
+          IconButton(
+            icon: Icon(Icons.refresh, color: Colors.white),
+            onPressed: _loadDashboardData,
+            tooltip: 'Actualizar',
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final userData = authProvider.userInfo;
     final isMobile = MediaQuery.of(context).size.width < 900;
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      drawer: isMobile
-          ? Drawer(
-              backgroundColor: Color(0xFF161B22),
-              child: _buildSidebar(userData),
-            )
-          : null,
+      bottomNavigationBar: CompanyBottomNav(currentRoute: '/company_dashboard'),
       body: SafeArea(
         child: _isLoading
             ? Center(
                 child: CircularProgressIndicator(color: Colors.blue[600]),
               )
-            : Row(
+            : Column(
                 children: [
-                  if (!isMobile) _buildSidebar(userData),
+                  // Header principal
+                  _buildHeader(),
+                  
                   Expanded(
                     child: Padding(
-                      padding: EdgeInsets.all(isMobile ? 16 : 32),
+                      padding: EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (isMobile) ...[
-                            Builder(builder: (context) {
-                              return Row(
+                          // Título
+                          Text(
+                            'Panel de la empresa',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          
+                          if (_errorMessage.isNotEmpty)
+                            Container(
+                              padding: EdgeInsets.all(16),
+                              margin: EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: Colors.red[900]!.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.red[400]!, width: 1),
+                              ),
+                              child: Row(
                                 children: [
-                                  IconButton(
-                                    icon: Icon(Icons.menu, color: Colors.white),
-                                    onPressed: () =>
-                                        Scaffold.of(context).openDrawer(),
+                                  Icon(Icons.error_outline, color: Colors.red[400]),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _errorMessage,
+                                      style: TextStyle(
+                                        color: Colors.red[400],
+                                      ),
+                                    ),
                                   ),
-                                  SizedBox(width: 8),
-                                  Expanded(child: _buildHeader(isMobile)),
                                 ],
-                              );
-                            }),
-                            SizedBox(height: 16),
-                          ] else ...[
-                            _buildHeader(isMobile),
-                            SizedBox(height: 24),
-                          ],
+                              ),
+                            ),
 
                           if (_pendingActivations > 0)
                             Container(
                               width: double.infinity,
                               padding: EdgeInsets.all(20),
-                              margin: EdgeInsets.only(bottom: 24),
+                              margin: EdgeInsets.only(bottom: 16),
                               decoration: BoxDecoration(
                                 color: Colors.orange[900]!.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
@@ -731,62 +759,70 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (_dashboardData.isNotEmpty)
-                                    GridView.count(
-                                      shrinkWrap: true,
-                                      physics: NeverScrollableScrollPhysics(),
-                                      crossAxisCount: isMobile ? 2 : 4,
-                                      crossAxisSpacing: isMobile ? 12 : 20,
-                                      mainAxisSpacing: isMobile ? 12 : 20,
-                                      childAspectRatio: 0.9,
-                                      children: [
-                                        _buildMetricCard(
-                                          'Proyectos totales',
-                                          _dashboardData['total_projects'] ?? _dashboardData['projects'] ?? 0,
-                                          '+Active now',
-                                          Colors.blue[400]!,
-                                        ),
-                                        _buildMetricCard(
-                                          'Eventos activos',
-                                          _dashboardData['active_events'] ?? _dashboardData['activeEvents'] ?? 0,
-                                          'EN CURSO',
-                                          Colors.green[400]!,
-                                        ),
-                                        _buildMetricCard(
-                                          'Posiciones cubiertas',
-                                          '${_dashboardData['filled_positions'] ?? _dashboardData['filledPositions'] ?? 0}/${_dashboardData['total_positions'] ?? _dashboardData['totalPositions'] ?? 0}',
-                                          'ESTADO OPERATIVO',
-                                          Colors.purple[400]!,
-                                        ),
-                                        _buildMetricCard(
-                                          'Freelancers Únicos',
-                                          _dashboardData['unique_freelancers'] ?? _dashboardData['uniqueFreelancers'] ?? 0,
-                                          'RED DE TALENTO',
-                                          Colors.orange[400]!,
-                                        ),
-                                      ],
-                                    )
-                                  else
-                                    Container(
-                                      padding: EdgeInsets.all(32),
-                                      decoration: BoxDecoration(
-                                        color: Color(0xFF161B22),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Color(0xFF30363D), width: 1),
+                                  // Métricas
+                                  GridView.count(
+                                    shrinkWrap: true,
+                                    physics: NeverScrollableScrollPhysics(),
+                                    crossAxisCount: isMobile ? 2 : 4,
+                                    crossAxisSpacing: isMobile ? 12 : 20,
+                                    mainAxisSpacing: isMobile ? 12 : 20,
+                                    childAspectRatio: 0.9,
+                                    children: [
+                                      _buildMetricCard(
+                                        'Proyectos totales',
+                                        _dashboardData['total_projects'] ?? 0,
+                                        '+Active now',
+                                        Colors.blue[400]!,
                                       ),
-                                      child: Center(
-                                        child: CircularProgressIndicator(color: Colors.blue[600]),
+                                      _buildMetricCard(
+                                        'Eventos activos',
+                                        _dashboardData['active_events'] ?? 0,
+                                        'EN CURSO',
+                                        Colors.green[400]!,
                                       ),
-                                    ),
+                                      _buildMetricCard(
+                                        'Posiciones cubiertas',
+                                        '${_dashboardData['filled_positions'] ?? 0}/${_dashboardData['total_positions'] ?? 0}',
+                                        'ESTADO OPERATIVO',
+                                        Colors.purple[400]!,
+                                      ),
+                                      _buildMetricCard(
+                                        'Freelancers Únicos',
+                                        _dashboardData['unique_freelancers'] ?? 0,
+                                        'RED DE TALENTO',
+                                        Colors.orange[400]!,
+                                      ),
+                                    ],
+                                  ),
+                                  
                                   SizedBox(height: 32),
 
-                                  Text(
-                                    'Mis eventos recientes',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: isMobile ? 18 : 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  // Eventos recientes
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Mis eventos recientes',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () {
+                                          Navigator.pushNamed(context, '/events');
+                                        },
+                                        icon: Icon(Icons.arrow_forward, color: Colors.blue[400], size: 16),
+                                        label: Text(
+                                          'Ver todos',
+                                          style: TextStyle(
+                                            color: Colors.blue[400],
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   SizedBox(height: 16),
                                   _buildRecentEventsTable(),
