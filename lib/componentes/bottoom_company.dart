@@ -51,13 +51,13 @@ class CompanyBottomNav extends StatelessWidget {
                 label: 'Red',
                 route: '/company-history',
               ),
-              _buildNavItem(
+             /* _buildNavItem(
                 context: context,
                 icon: Icons.settings_outlined,
                 activeIcon: Icons.settings,
                 label: 'Ajustes',
                 route: '/company-settings',
-              ),
+              ),*/
             ],
           ),
         ),

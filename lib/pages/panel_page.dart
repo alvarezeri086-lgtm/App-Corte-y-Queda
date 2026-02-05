@@ -16,16 +16,14 @@ class CompanyDashboardPage extends StatefulWidget {
 class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   bool _isLoading = true;
   Map<String, dynamic> _dashboardData = {
-    'total_projects': 0,
+    'total_events': 0,
     'active_events': 0,
-    'filled_positions': 0,
+    'closed_events': 0,
     'total_positions': 0,
+    'covered_positions': 0,
     'unique_freelancers': 0,
   };
   List<Map<String, dynamic>> _recentEvents = [];
-  int _pendingActivations = 0;
-  Map<String, dynamic> _userData = {};
-  String _errorMessage = '';
 
   @override
   void initState() {
@@ -34,72 +32,18 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
   }
 
   Future<void> _loadDashboardData() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    setState(() => _isLoading = true);
 
-    try {
-      await Future.wait([
-        _loadUserData(),
-        _loadOrganizationDashboard(),
-        _loadRecentEvents(),
-      ]);
-    } catch (e) {
-      print('Error loading dashboard: $e');
-      setState(() {
-        _errorMessage = 'Error al cargar datos';
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _loadUserData() async {
     final baseUrl = dotenv.env['API_BASE_URL'];
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final token = authProvider.accessToken;
 
-    if (token == null || baseUrl == null) return;
-
-    try {
-      print('Loading user data from: $baseUrl/users/me');
-      final response = await http.get(
-        Uri.parse('$baseUrl/users/me'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      print('User data response: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        print('User data loaded: $data');
-        
-        setState(() {
-          _userData = data;
-        });
-      } else {
-        print('Error loading user data: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      print('Error loading user data: $e');
+    if (token == null || baseUrl == null) {
+      setState(() => _isLoading = false);
+      return;
     }
-  }
-
-  Future<void> _loadOrganizationDashboard() async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return;
 
     try {
-      print('Loading dashboard from: $baseUrl/dashboard/organization');
       final response = await http.get(
         Uri.parse('$baseUrl/dashboard/organization'),
         headers: {
@@ -108,216 +52,74 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         },
       );
 
-      print('Dashboard response: ${response.statusCode}');
-      print('Dashboard body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('Dashboard data parsed: $data');
         
-        // Procesar diferentes estructuras de respuesta
-        Map<String, dynamic> processedData = {};
-        
-        // Intenta extraer datos de diferentes estructuras posibles
-        if (data is Map<String, dynamic>) {
-          // Caso 1: Datos directos
-          if (data.containsKey('total_projects') || data.containsKey('projects')) {
-            processedData = _extractDashboardData(data);
-          }
-          // Caso 2: Datos anidados en una clave
-          else if (data.containsKey('dashboard')) {
-            processedData = _extractDashboardData(data['dashboard']);
-          }
-          // Caso 3: Datos en data/items
-          else if (data.containsKey('data')) {
-            processedData = _extractDashboardData(data['data']);
-          }
-        }
-        
-        setState(() {
-          _dashboardData = processedData;
-          _pendingActivations = _parsePendingActivations(data);
-        });
-        
-        print('Processed dashboard data: $_dashboardData');
-      } else {
-        print('Error loading dashboard: ${response.statusCode}');
-        print('Response body: ${response.body}');
-      }
-    } catch (e) {
-      print('Error loading organization dashboard: $e');
-    }
-  }
-
-  Map<String, dynamic> _extractDashboardData(Map<String, dynamic> data) {
-    return {
-      'total_projects': data['total_projects'] ?? 
-                       data['projects'] ?? 
-                       data['total_projects_count'] ?? 
-                       data['projects_count'] ?? 0,
-      'active_events': data['active_events'] ?? 
-                      data['active_events_count'] ?? 
-                      data['events_active'] ?? 
-                      data['activeEvents'] ?? 0,
-      'filled_positions': data['filled_positions'] ?? 
-                         data['positions_filled'] ?? 
-                         data['filledPositions'] ?? 
-                         data['positions_filled_count'] ?? 0,
-      'total_positions': data['total_positions'] ?? 
-                        data['positions_total'] ?? 
-                        data['totalPositions'] ?? 
-                        data['positions_total_count'] ?? 0,
-      'unique_freelancers': data['unique_freelancers'] ?? 
-                           data['freelancers_unique'] ?? 
-                           data['uniqueFreelancers'] ?? 
-                           data['freelancers_unique_count'] ?? 0,
-    };
-  }
-
-  int _parsePendingActivations(Map<String, dynamic> data) {
-    try {
-      // Prueba diferentes estructuras posibles
-      final dynamicData = data;
-      
-      // Buscar en diferentes niveles
-      List<String> possiblePaths = [
-        'pending_activations',
-        'activations_pending',
-        'pending.activations',
-        'activations.pending',
-        'pending_count',
-        'pendingActivations',
-      ];
-      
-      for (var path in possiblePaths) {
-        if (path.contains('.')) {
-          final parts = path.split('.');
-          dynamic current = dynamicData;
-          bool found = true;
+        if (data.containsKey('kpis') && data['kpis'] is Map) {
+          final kpis = data['kpis'] as Map<String, dynamic>;
           
-          for (var part in parts) {
-            if (current is Map<String, dynamic> && current.containsKey(part)) {
-              current = current[part];
-            } else {
-              found = false;
-              break;
-            }
-          }
-          
-          if (found && current != null && current is int) {
-            return current;
-          }
-        } else if (dynamicData is Map<String, dynamic> && 
-                   dynamicData.containsKey(path) && 
-                   dynamicData[path] is int) {
-          return dynamicData[path];
-        }
-      }
-      
-      return 0;
-    } catch (e) {
-      print('Error parsing pending activations: $e');
-      return 0;
-    }
-  }
-
-  Future<void> _loadRecentEvents() async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return;
-
-    try {
-      print('Loading recent events from: $baseUrl/events/?limit=4&status=ACTIVE');
-      final response = await http.get(
-        Uri.parse('$baseUrl/events/my-events/?limit=4&status=ACTIVE'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      print('Events response: ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        print('Events data: $data');
-        
-        List<dynamic> eventsList = [];
-        
-        // Procesar diferentes estructuras de respuesta
-        if (data is List) {
-          eventsList = data;
-        } else if (data is Map<String, dynamic>) {
-          if (data['items'] is List) {
-            eventsList = data['items'];
-          } else if (data['data'] is List) {
-            eventsList = data['data'];
-          } else if (data['results'] is List) {
-            eventsList = data['results'];
-          } else if (data['events'] is List) {
-            eventsList = data['events'];
-          } else if (data['my_events'] is List) {
-            eventsList = data['my_events'];
-          }
-          
-          // Si no hay lista específica, buscar cualquier lista
-          if (eventsList.isEmpty) {
-            data.forEach((key, value) {
-              if (value is List && eventsList.isEmpty) {
-                eventsList = value;
-              }
-            });
-          }
-        }
-
-        setState(() {
-          _recentEvents = eventsList.map<Map<String, dynamic>>((event) {
-            DateTime? startDate;
-            DateTime? endDate;
-            
-            if (event['start_date'] != null) {
-              try {
-                startDate = DateTime.parse(event['start_date'].toString());
-              } catch (e) {
-                print('Error parsing start date: $e');
-              }
-            }
-            
-            if (event['end_date'] != null) {
-              try {
-                endDate = DateTime.parse(event['end_date'].toString());
-              } catch (e) {
-                print('Error parsing end date: $e');
-              }
-            }
-
-            return {
-              'id': event['id']?.toString() ?? '',
-              'title': event['title']?.toString() ?? 
-                      event['name']?.toString() ?? 
-                      'Sin título',
-              'start_date': startDate,
-              'end_date': endDate,
-              'location': event['location']?.toString() ?? 
-                         event['venue']?.toString() ?? 
-                         'Sin ubicación',
-              'status': event['status']?.toString() ?? 'INACTIVE',
-              'vacancies': event['vacancies'] ?? 
-                          event['available_positions'] ?? 
-                          event['positions_count'] ?? 0,
+          setState(() {
+            _dashboardData = {
+              'total_events': kpis['total_events'] ?? 0,
+              'active_events': kpis['active_events'] ?? 0,
+              'closed_events': kpis['closed_events'] ?? 0,
+              'total_positions': kpis['total_positions'] ?? 0,
+              'covered_positions': kpis['covered_positions'] ?? 0,
+              'unique_freelancers': kpis['unique_freelancers'] ?? 0,
             };
-          }).toList();
-        });
-        
-        print('Loaded ${_recentEvents.length} recent events');
+          });
+        }
+
+        if (data.containsKey('recent_events') && data['recent_events'] is List) {
+          final events = data['recent_events'] as List;
+          setState(() {
+            _recentEvents = events.take(4).map<Map<String, dynamic>>((event) {
+              return {
+                'id': event['id']?.toString() ?? '',
+                'title': event['title']?.toString() ?? event['name']?.toString() ?? 'Sin título',
+                'start_date': event['start_date']?.toString(),
+                'end_date': event['end_date']?.toString(),
+                'location': event['location']?.toString() ?? 'Sin ubicación',
+                'status': event['status']?.toString() ?? 'ACTIVE',
+                'open_positions': event['open_positions'] ?? 0,
+              };
+            }).toList();
+          });
+        }
+
+        setState(() => _isLoading = false);
       } else {
-        print('Error loading events: ${response.statusCode} - ${response.body}');
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      print('Error loading recent events: $e');
+      setState(() => _isLoading = false);
     }
+  }
+
+  void _navigateToEventDetails(String eventId) {
+    if (eventId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ID de evento no válido'),
+          backgroundColor: Colors.red[600],
+        ),
+      );
+      return;
+    }
+
+    // Navegar a la página de detalles del evento
+    Navigator.pushNamed(
+      context,
+      '/event_details',
+      arguments: eventId,
+    ).catchError((error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al abrir detalles del evento'),
+          backgroundColor: Colors.red[600],
+        ),
+      );
+    });
   }
 
   Future<void> _logout() async {
@@ -326,10 +128,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Color(0xFF161B22),
-        title: Text(
-          'Cerrar sesión',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: Text('Cerrar sesión', style: TextStyle(color: Colors.white)),
         content: Text(
           '¿Estás seguro de que quieres cerrar sesión?',
           style: TextStyle(color: Colors.grey[400]),
@@ -337,17 +136,11 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancelar',
-              style: TextStyle(color: Colors.grey[400]),
-            ),
+            child: Text('Cancelar', style: TextStyle(color: Colors.grey[400])),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              'Cerrar sesión',
-              style: TextStyle(color: Colors.red[400]),
-            ),
+            child: Text('Cerrar sesión', style: TextStyle(color: Colors.red[400])),
           ),
         ],
       ),
@@ -363,7 +156,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Widget _buildMetricCard(String title, dynamic value, String subtitle, Color color) {
     return Container(
-      padding: EdgeInsets.all(20),
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
         color: Color(0xFF161B22),
         borderRadius: BorderRadius.circular(12),
@@ -371,38 +164,178 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             value?.toString() ?? '0',
             style: TextStyle(
               color: color,
-              fontSize: 32,
+              fontSize: 28,
               fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 12),
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+              height: 1.1,
             ),
           ),
           SizedBox(height: 6),
           Text(
+            title,
+            style: TextStyle(
+              color: Colors.grey[300],
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              height: 1.2,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SizedBox(height: 3),
+          Text(
             subtitle,
             style: TextStyle(
-              color: Colors.grey[600],
+              color: Colors.grey[500],
               fontSize: 11,
+              height: 1.2,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRecentEventsTable() {
+  Widget _buildVerticalEventCard(Map<String, dynamic> event) {
+    String dateRange = 'N/A';
+    if (event['start_date'] != null) {
+      try {
+        final start = DateTime.parse(event['start_date']);
+        dateRange = DateFormat('dd MMM').format(start);
+        if (event['end_date'] != null) {
+          final end = DateTime.parse(event['end_date']);
+          dateRange += ' - ${DateFormat('dd MMM').format(end)}';
+        }
+      } catch (e) {}
+    }
+    
+    final openPositions = event['open_positions'] ?? 0;
+    final vacancyText = openPositions > 0 ? '$openPositions abiertos' : 'Cubierto';
+    final vacancyColor = openPositions > 0 ? Colors.orange[400]! : Colors.green[400]!;
+    final status = event['status'] ?? 'INACTIVE';
+    final statusColor = status == 'ACTIVE' ? Colors.green[400]! : Colors.grey[400]!;
+
+    return InkWell(
+      onTap: () => _navigateToEventDetails(event['id']),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Color(0xFF161B22),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Color(0xFF30363D), width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Fila 1: Título y Estado
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      event['title'],
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: statusColor, width: 1),
+                    ),
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              SizedBox(height: 10),
+              
+              // Fila 2: Fecha y Ubicación
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, color: Colors.grey[500], size: 14),
+                  SizedBox(width: 6),
+                  Text(
+                    dateRange,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                  SizedBox(width: 14),
+                  Icon(Icons.location_on, color: Colors.grey[500], size: 14),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      event['location'],
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ],
+              ),
+              
+              SizedBox(height: 10),
+              
+              // Fila 3: Vacantes
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: vacancyColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: vacancyColor, width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      openPositions > 0 ? Icons.person_outline : Icons.person,
+                      color: vacancyColor,
+                      size: 14,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      vacancyText,
+                      style: TextStyle(
+                        color: vacancyColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecentEventsVertical() {
     if (_recentEvents.isEmpty) {
       return Container(
         padding: EdgeInsets.all(32),
@@ -418,18 +351,7 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
               SizedBox(height: 16),
               Text(
                 'No hay eventos recientes',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 16,
-                ),
-              ),
-              SizedBox(height: 8),
-              TextButton(
-                onPressed: _loadDashboardData,
-                child: Text(
-                  'Reintentar carga',
-                  style: TextStyle(color: Colors.blue[400]),
-                ),
+                style: TextStyle(color: Colors.grey[400], fontSize: 15),
               ),
             ],
           ),
@@ -437,207 +359,15 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Color(0xFF30363D), width: 1),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 24,
-          dataRowHeight: 60,
-          columns: [
-            DataColumn(
-              label: Container(
-                padding: EdgeInsets.only(left: 16),
-                child: Text(
-                  'NOMBRE DEL PROYECTO',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'FECHA',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'UBICACIÓN',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'URGENCIA',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            DataColumn(
-              label: Container(
-                padding: EdgeInsets.only(right: 16),
-                child: Text(
-                  'ESTADO',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-          rows: _recentEvents.map((event) {
-            String dateRange = 'N/A';
-            if (event['start_date'] != null && event['start_date'] is DateTime) {
-              final startDate = DateFormat('dd MMM').format(event['start_date'] as DateTime);
-              if (event['end_date'] != null && event['end_date'] is DateTime) {
-                final endDate = DateFormat('dd MMM').format(event['end_date'] as DateTime);
-                dateRange = '$startDate - $endDate';
-              } else {
-                dateRange = startDate;
-              }
-            }
-            
-            final vacancies = event['vacancies'] ?? 0;
-            final urgencyText = vacancies > 0 ? '$vacancies Vacantes' : 'Cubierto';
-            final urgencyColor = vacancies > 0 ? Colors.orange[400] : Colors.green[400];
-            
-            final status = event['status'];
-            final statusColor = status == 'ACTIVE' ? Colors.green[400] : Colors.grey[400];
-
-            return DataRow(
-              cells: [
-                DataCell(
-                  Container(
-                    padding: EdgeInsets.only(left: 16),
-                    child: Text(
-                      event['title'],
-                      style: TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ),
-                ),
-                DataCell(
-                  Text(
-                    dateRange,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                  ),
-                ),
-                DataCell(
-                  Text(
-                    event['location'],
-                    style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                  ),
-                ),
-                DataCell(
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: urgencyColor!.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: urgencyColor, width: 1),
-                    ),
-                    child: Text(
-                      urgencyText,
-                      style: TextStyle(
-                        color: urgencyColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                DataCell(
-                  Container(
-                    padding: EdgeInsets.only(right: 16),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: statusColor!.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: statusColor, width: 1),
-                      ),
-                      child: Text(
-                        status,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      color: Color(0xFF161B22),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: Colors.blue[600],
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(Icons.connect_without_contact,
-                    color: Colors.white, size: 20),
-              ),
-              SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Corte y Queda',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
-                  Text('SISTEMA OPERATIVO OPERACIONAL',
-                      style:
-                          TextStyle(color: Colors.grey[600], fontSize: 9)),
-                ],
-              ),
-            ],
-          ),
-          IconButton(
-            icon: Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadDashboardData,
-            tooltip: 'Actualizar',
-          ),
-        ],
-      ),
+    return Column(
+      children: [
+        ..._recentEvents.map((event) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10.0),
+            child: _buildVerticalEventCard(event),
+          );
+        }).toList(),
+      ],
     );
   }
 
@@ -647,195 +377,89 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      bottomNavigationBar: CompanyBottomNav(currentRoute: '/company_dashboard'),
+      bottomNavigationBar: isMobile 
+          ? CompanyBottomNav(currentRoute: '/company_dashboard')
+          : null,
       body: SafeArea(
-        child: _isLoading
-            ? Center(
-                child: CircularProgressIndicator(color: Colors.blue[600]),
-              )
-            : Column(
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              color: Color(0xFF161B22),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Header principal
-                  _buildHeader(),
-                  
-                  Expanded(
-                    child: Padding(
+                  Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.blue[600],
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(Icons.connect_without_contact, color: Colors.white, size: 20),
+                      ),
+                      SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Corte y Queda', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text('SISTEMA OPERATIVO OPERACIONAL', style: TextStyle(color: Colors.grey[600], fontSize: 9)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.refresh, color: Colors.white),
+                    onPressed: _loadDashboardData,
+                    tooltip: 'Actualizar',
+                  ),
+                ],
+              ),
+            ),
+            
+            Expanded(
+              child: _isLoading
+                  ? Center(child: CircularProgressIndicator(color: Colors.blue[600]))
+                  : SingleChildScrollView(
                       padding: EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Título
                           Text(
                             'Panel de la empresa',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                           ),
-                          SizedBox(height: 8),
+                          SizedBox(height: 16),
+
+                          // Tarjetas de métricas 2x2 mejor proporcionadas
+                          GridView.count(
+                            shrinkWrap: true,
+                            physics: NeverScrollableScrollPhysics(),
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 1.3,
+                            children: [
+                              _buildMetricCard('Eventos totales', _dashboardData['total_events'], '${_dashboardData['active_events']} activos', Colors.blue[400]!),
+                              _buildMetricCard('Eventos activos', _dashboardData['active_events'], 'EN CURSO', Colors.green[400]!),
+                              _buildMetricCard('Posiciones cubiertas', '${_dashboardData['covered_positions']}/${_dashboardData['total_positions']}', 'ESTADO OPERATIVO', Colors.purple[400]!),
+                              _buildMetricCard('Freelancers únicos', _dashboardData['unique_freelancers'], 'RED DE TALENTO', Colors.orange[400]!),
+                            ],
+                          ),
                           
-                          if (_errorMessage.isNotEmpty)
-                            Container(
-                              padding: EdgeInsets.all(16),
-                              margin: EdgeInsets.only(bottom: 16),
-                              decoration: BoxDecoration(
-                                color: Colors.red[900]!.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.red[400]!, width: 1),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.error_outline, color: Colors.red[400]),
-                                  SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _errorMessage,
-                                      style: TextStyle(
-                                        color: Colors.red[400],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          if (_pendingActivations > 0)
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.all(20),
-                              margin: EdgeInsets.only(bottom: 16),
-                              decoration: BoxDecoration(
-                                color: Colors.orange[900]!.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.orange[400]!, width: 1),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.warning_amber_outlined, color: Colors.orange[400]),
-                                      SizedBox(width: 12),
-                                      Text(
-                                        'Atención Requerida',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  SizedBox(height: 12),
-                                  Text(
-                                    '$_pendingActivations activaciones en espera de respuesta.',
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  SizedBox(height: 12),
-                                  GestureDetector(
-                                    onTap: () {
-                                      Navigator.pushNamed(context, '/activations');
-                                    },
-                                    child: Text(
-                                      'Revisar solicitudes pendientes.',
-                                      style: TextStyle(
-                                        color: Colors.blue[400],
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Métricas
-                                  GridView.count(
-                                    shrinkWrap: true,
-                                    physics: NeverScrollableScrollPhysics(),
-                                    crossAxisCount: isMobile ? 2 : 4,
-                                    crossAxisSpacing: isMobile ? 12 : 20,
-                                    mainAxisSpacing: isMobile ? 12 : 20,
-                                    childAspectRatio: 0.9,
-                                    children: [
-                                      _buildMetricCard(
-                                        'Proyectos totales',
-                                        _dashboardData['total_projects'] ?? 0,
-                                        '+Active now',
-                                        Colors.blue[400]!,
-                                      ),
-                                      _buildMetricCard(
-                                        'Eventos activos',
-                                        _dashboardData['active_events'] ?? 0,
-                                        'EN CURSO',
-                                        Colors.green[400]!,
-                                      ),
-                                      _buildMetricCard(
-                                        'Posiciones cubiertas',
-                                        '${_dashboardData['filled_positions'] ?? 0}/${_dashboardData['total_positions'] ?? 0}',
-                                        'ESTADO OPERATIVO',
-                                        Colors.purple[400]!,
-                                      ),
-                                      _buildMetricCard(
-                                        'Freelancers Únicos',
-                                        _dashboardData['unique_freelancers'] ?? 0,
-                                        'RED DE TALENTO',
-                                        Colors.orange[400]!,
-                                      ),
-                                    ],
-                                  ),
-                                  
-                                  SizedBox(height: 32),
-
-                                  // Eventos recientes
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Mis eventos recientes',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      TextButton.icon(
-                                        onPressed: () {
-                                          Navigator.pushNamed(context, '/events');
-                                        },
-                                        icon: Icon(Icons.arrow_forward, color: Colors.blue[400], size: 16),
-                                        label: Text(
-                                          'Ver todos',
-                                          style: TextStyle(
-                                            color: Colors.blue[400],
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  SizedBox(height: 16),
-                                  _buildRecentEventsTable(),
-                                ],
-                              ),
-                            ),
-                          ),
+                          SizedBox(height: 24),
+                          Text('Eventos recientes', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                          SizedBox(height: 12),
+                          _buildRecentEventsVertical(),
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ),
+            ),
+          ],
+        ),
       ),
     );
   }

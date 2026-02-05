@@ -17,6 +17,8 @@ import 'pagina_principal.dart';
 import 'pages/activaciones_page.dart';
 import 'pages/panel_page.dart';
 import 'pages/portal_freelancer_page.dart';
+import 'pages/perfil_freelancer.dart';
+import 'pages/activaciones_freelancer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -125,6 +127,8 @@ class MyApp extends StatelessWidget {
           '/company_dashboard': (context) => CompanyDashboardPage(),
           '/activations': (context) => ActivationsPage(),
           '/freelancer_dashboard': (context) => FreelancerDashboardPage(),
+           '/profile': (context) => const ProfileScreen(),
+           '/freelancer_activations': (context) => const FreelancerActivationsScreen(),
         },
         onGenerateRoute: (settings) {
           return null;

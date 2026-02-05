@@ -279,26 +279,6 @@ class _LoginPageState extends State<LoginPage> {
                               String redirectRoute = authProvider.getRedirectRoute();
                               String? userId = authProvider.userId;
 
-                              print(' LOGIN EXITOSO ');
-                              print('ID de usuario: $userId');
-                              print('Tipo de usuario: ${authProvider.userInfo?['user_type']}');
-                              print('Ruta de redirección: $redirectRoute');
-                              
-                              if (authProvider.userInfo?['user_type'] == 'FREELANCER') {
-                                final profile = authProvider.userInfo?['freelancer_profile'];
-                                print(' FREELANCER');
-                                print('Perfil existe: ${profile != null}');
-                                if (profile != null) {
-                                  print('Bio: ${profile['bio']}');
-                                  print('Years Experience: ${profile['years_experience']}');
-                                  print('RFC: ${profile['rfc']}');
-                                  print('Location: ${profile['location']}');
-                                  print('Job Roles: ${profile['job_roles']}');
-                                  print('Tags: ${profile['tags']}');
-                                  print('Job Roles tipo: ${profile['job_roles']?.runtimeType}');
-                                  print('Tags tipo: ${profile['tags']?.runtimeType}');
-                                }
-                              }
                               if (redirectRoute == '/complete_profile') {
                                 Navigator.pushReplacementNamed(
                                   context,

@@ -73,13 +73,6 @@ class AuthProvider with ChangeNotifier {
       
       bool step2Complete = hasJobRoles || hasTags;
       
-      print('=== VALIDACIÓN PERFIL COMPLETO ===');
-      print('Paso 1 (básicos): $step1Complete');
-      print('Job Roles presente: $hasJobRoles (tipo: ${jobRoles?.runtimeType})');
-      print('Tags presente: $hasTags (tipo: ${tags?.runtimeType})');
-      print('Paso 2 (roles/tags): $step2Complete');
-      print('Perfil completo: ${step1Complete && step2Complete}');
-      
       return step1Complete && step2Complete;
     }
     
@@ -99,11 +92,7 @@ class AuthProvider with ChangeNotifier {
     if (userType == 'FREELANCER') {
       final profile = _userInfo!['freelancer_profile'];
       
-      print('=== DETERMINANDO RUTA ===');
-      print('Perfil existe: ${profile != null}');
-      
       if (profile == null) {
-        print('Ruta: /complete_profile (no hay perfil)');
         return '/complete_profile';
       }
       
@@ -112,10 +101,7 @@ class AuthProvider with ChangeNotifier {
                            profile['rfc'] != null &&
                            profile['location'] != null;
       
-      print('Datos básicos completos: $basicComplete');
-      
       if (!basicComplete) {
-        print('Ruta: /complete_profile (faltan datos básicos)');
         return '/complete_profile';
       }
       
@@ -141,15 +127,10 @@ class AuthProvider with ChangeNotifier {
         }
       }
       
-      print('Job Roles: ${hasJobRoles ? 'Presente' : 'Ausente'} (${jobRoles?.runtimeType})');
-      print('Tags: ${hasTags ? 'Presente' : 'Ausente'} (${tags?.runtimeType})');
-      
       if (!hasJobRoles && !hasTags) {
-        print('Ruta: /complete_profile2 (faltan roles/tags)');
         return '/complete_profile2';
       }
       
-      print('Ruta: /freelancer_dashboard (perfil completo)');
       return '/freelancer_dashboard';
     }
     
@@ -181,16 +162,11 @@ class AuthProvider with ChangeNotifier {
     final url = Uri.parse('$baseUrl/users/login');
 
     try {
-      print('Iniciando sesión con: $email');
-      print('URL: $url');
-
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: 'email=$email&password=$password',
       );
-
-      print('Estado de respuesta: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         try {
@@ -251,8 +227,6 @@ class AuthProvider with ChangeNotifier {
     }
 
     try {
-      print('=== CARGANDO DATOS DEL USUARIO ===');
-      
       final userUrl = Uri.parse('$baseUrl/users/me');
       final userResponse = await http.get(
         userUrl,
@@ -262,14 +236,10 @@ class AuthProvider with ChangeNotifier {
         },
       );
 
-      print('Estado users/me: ${userResponse.statusCode}');
-
       if (userResponse.statusCode == 200) {
         final userData = jsonDecode(userResponse.body);
         
         if (userData['user_type'] == 'FREELANCER') {
-          print('Usuario es FREELANCER, obteniendo perfil completo...');
-          
           final profileUrl = Uri.parse('$baseUrl/freelancer/profile/get-roles');
           try {
             final profileResponse = await http.get(
@@ -280,15 +250,8 @@ class AuthProvider with ChangeNotifier {
               },
             );
             
-            print('Estado freelancer/profile/get-roles: ${profileResponse.statusCode}');
-            
             if (profileResponse.statusCode == 200) {
               final profileData = jsonDecode(profileResponse.body);
-              
-              print('=== PERFIL FREELANCER OBTENIDO ===');
-              print('Job Roles recibidos: ${profileData['job_roles']?.length ?? 0}');
-              print('Tags recibidos: ${profileData['tags']?.length ?? 0}');
-              print('Equipment recibidos: ${profileData['equipment']?.length ?? 0}');
               
               if (userData['freelancer_profile'] != null) {
                 userData['freelancer_profile']['job_roles'] = profileData['job_roles'] ?? [];
@@ -324,70 +287,6 @@ class AuthProvider with ChangeNotifier {
         
         _userInfo = userData;
         
-        print('=== INFORMACIÓN DEL USUARIO ===');
-        print('ID: ${userData['id']}');
-        print('Tipo de usuario: ${userData['user_type']}');
-        print('Email: ${userData['email']}');
-        print('Nombre completo: ${userData['full_name']}');
-        
-        if (userData['user_type'] == 'FREELANCER') {
-          final profile = userData['freelancer_profile'];
-          print('=== PERFIL FREELANCER ===');
-          if (profile != null) {
-            print('Biografía: ${profile['bio'] != null ? "✓" : "✗"}');
-            print('Años experiencia: ${profile['years_experience'] != null ? "✓" : "✗"}');
-            print('RFC: ${profile['rfc'] != null ? "✓" : "✗"}');
-            print('Ubicación: ${profile['location'] != null ? "✓" : "✗"}');
-            
-            final jobRoles = profile['job_roles'];
-            final tags = profile['tags'];
-            
-            print('--- Job Roles ---');
-            print('Tipo: ${jobRoles?.runtimeType}');
-            print('Valor: $jobRoles');
-            if (jobRoles is List) {
-              print('Es lista: Sí, longitud: ${jobRoles.length}');
-            } else if (jobRoles is Map) {
-              print('Es mapa: Sí, keys: ${jobRoles.keys}');
-            } else {
-              print('Es null o tipo desconocido');
-            }
-            
-            print('--- Tags ---');
-            print('Tipo: ${tags?.runtimeType}');
-            print('Valor: $tags');
-            if (tags is List) {
-              print('Es lista: Sí, longitud: ${tags.length}');
-            } else if (tags is Map) {
-              print('Es mapa: Sí, keys: ${tags.keys}');
-            } else {
-              print('Es null o tipo desconocido');
-            }
-          } else {
-            print('Perfil freelancer: ✗ No existe');
-          }
-        }
-        
-        if (userData['user_type'] == 'ADMIN' || userData['user_type'] == 'COMPANY') {
-          final org = userData['organization'];
-          if (org != null) {
-            print('=== ORGANIZACIÓN ===');
-            print('ID: ${org['id']}');
-            print('Nombre legal: ${org['legal_name']}');
-            print('Nombre comercial: ${org['trade_name']}');
-            print('RFC: ${org['rfc']}');
-            print('Tipo: ${org['org_type']}');
-          } else {
-            print('Organización: ✗ No creada');
-          }
-        }
-        
-        print('========================');
-        print('Perfil básico completo: ${isBasicProfileComplete ? "✓" : "✗"}');
-        print('Perfil completo: ${isFullProfileComplete ? "✓" : "✗"}');
-        print('Ruta de redirección: ${getRedirectRoute()}');
-        print('========================');
-        
         notifyListeners();
         return userData;
       } else {
@@ -414,8 +313,6 @@ class AuthProvider with ChangeNotifier {
     }
 
     try {
-      print('=== ACTUALIZANDO PERFIL FREELANCER ===');
-      
       final profileUrl = Uri.parse('$baseUrl/freelancer/profile/get-roles');
       final profileResponse = await http.get(
         profileUrl,
@@ -425,15 +322,8 @@ class AuthProvider with ChangeNotifier {
         },
       );
       
-      print('Estado de actualización: ${profileResponse.statusCode}');
-      
       if (profileResponse.statusCode == 200) {
         final profileData = jsonDecode(profileResponse.body);
-        
-        print('Datos recibidos en refresh:');
-        print('- Job Roles: ${profileData['job_roles']?.length ?? 0}');
-        print('- Tags: ${profileData['tags']?.length ?? 0}');
-        print('- Equipment: ${profileData['equipment']?.length ?? 0}');
         
         if (_userInfo?['freelancer_profile'] != null) {
           _userInfo!['freelancer_profile']['job_roles'] = profileData['job_roles'] ?? [];
@@ -446,10 +336,6 @@ class AuthProvider with ChangeNotifier {
             'equipment': profileData['equipment'] ?? [],
           };
         }
-        
-        print('Perfil actualizado exitosamente');
-        print('Job Roles ahora: ${_userInfo?['freelancer_profile']?['job_roles']?.length ?? 0}');
-        print('Tags ahora: ${_userInfo?['freelancer_profile']?['tags']?.length ?? 0}');
         
         notifyListeners();
       } else {

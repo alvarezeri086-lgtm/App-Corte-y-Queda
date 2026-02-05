@@ -15,20 +15,23 @@ class FreelancerDashboardPage extends StatefulWidget {
 
 class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
   bool _isLoading = true;
-  Map<String, dynamic> _userData = {};
-  Map<String, dynamic> _freelancerProfile = {};
-  List<Map<String, dynamic>> _jobRoles = [];
-  List<Map<String, dynamic>> _tags = [];
-  List<Map<String, dynamic>> _equipment = [];
+  Map<String, dynamic> _dashboardData = {
+    'events_completed': 0,
+    'acceptance_rate': 0,
+    'profile_completion': 0,
+    'upcoming_events_count': 0,
+  };
   List<Map<String, dynamic>> _upcomingEvents = [];
 
   @override
   void initState() {
     super.initState();
-    _loadAllData();
+    _loadDashboardData();
   }
 
-  Future<void> _loadAllData() async {
+  Future<void> _loadDashboardData() async {
+    setState(() => _isLoading = true);
+
     final baseUrl = dotenv.env['API_BASE_URL'];
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final token = authProvider.accessToken;
@@ -39,97 +42,51 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
     }
 
     try {
-      await Future.wait([
-        _loadUserData(baseUrl, token),
-        _loadEvents(baseUrl, token),
-      ]);
-    } catch (e) {
-      print('Error loading freelancer dashboard: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _loadUserData(String baseUrl, String token) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/users/me'),
+      final dashboardResponse = await http.get(
+        Uri.parse('$baseUrl/dashboard/freelancer'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (!mounted) return;
-
-        setState(() {
-          _userData = data;
-          _freelancerProfile = data['freelancer_profile'] ?? {};
-
-          final rawRoles = _freelancerProfile['job_roles'];
-          if (rawRoles is List) {
-            _jobRoles = rawRoles.map((e) => e as Map<String, dynamic>).toList();
-          }
-
-          final rawTags = _freelancerProfile['tags'];
-          if (rawTags is List) {
-            _tags = rawTags.map((e) => e as Map<String, dynamic>).toList();
-          }
-
-          final rawEquip = _freelancerProfile['equipment'];
-          if (rawEquip is List) {
-            _equipment =
-                rawEquip.map((e) => e as Map<String, dynamic>).toList();
-          }
-        });
-      } else {
-        print('Error cargando datos del usuario: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error en _loadUserData: $e');
-    }
-  }
-
-  Future<void> _loadEvents(String baseUrl, String token) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/events/?limit=5'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        List<dynamic> eventsList = [];
-
-        if (data is List) {
-          eventsList = data;
-        } else if (data is Map) {
-          if (data['items'] is List) eventsList = data['items'];
-          else if (data['data'] is List) eventsList = data['data'];
-          else if (data['results'] is List) eventsList = data['results'];
+      if (dashboardResponse.statusCode == 200) {
+        final data = jsonDecode(dashboardResponse.body);
+        
+        if (data.containsKey('kpis') && data['kpis'] is Map) {
+          final kpis = data['kpis'] as Map<String, dynamic>;
+          
+          setState(() {
+            _dashboardData = {
+              'events_completed': kpis['events_completed'] ?? 0,
+              'acceptance_rate': kpis['acceptance_rate'] ?? 0,
+              'profile_completion': kpis['profile_completion'] ?? 0,
+              'upcoming_events_count': kpis['upcoming_events_count'] ?? 0,
+            };
+          });
         }
 
-        if (!mounted) return;
-        setState(() {
-          _upcomingEvents = eventsList.map<Map<String, dynamic>>((e) {
-            return {
-              'id': e['id']?.toString() ?? '',
-              'title': e['title']?.toString() ?? 'Sin título',
-              'start_date': e['start_date']?.toString(),
-              'end_date': e['end_date']?.toString(),
-              'location': e['location']?.toString() ?? 'Sin ubicación',
-              'status': e['status']?.toString() ?? 'ACTIVE',
-            };
-          }).toList();
-        });
+        if (data.containsKey('upcoming_events') && data['upcoming_events'] is List) {
+          final events = data['upcoming_events'] as List;
+          setState(() {
+            _upcomingEvents = events.map<Map<String, dynamic>>((event) {
+              return {
+                'id': event['id']?.toString() ?? '',
+                'title': event['title']?.toString() ?? 'Sin título',
+                'start_date': event['start_date']?.toString(),
+                'end_date': event['end_date']?.toString(),
+                'location': event['location']?.toString() ?? 'Sin ubicación',
+                'status': event['status']?.toString() ?? 'ACTIVE',
+              };
+            }).toList();
+          });
+        }
       }
+
+      setState(() => _isLoading = false);
     } catch (e) {
-      print('Error en _loadEvents: $e');
+      print('Error loading freelancer dashboard: $e');
+      setState(() => _isLoading = false);
     }
   }
 
@@ -140,8 +97,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Color(0xFF161B22),
-        title:
-            Text('Cerrar sesión', style: TextStyle(color: Colors.white)),
+        title: Text('Cerrar sesión', style: TextStyle(color: Colors.white)),
         content: Text(
           '¿Estás seguro de que quieres cerrar sesión?',
           style: TextStyle(color: Colors.grey[400]),
@@ -149,13 +105,11 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child:
-                Text('Cancelar', style: TextStyle(color: Colors.grey[400])),
+            child: Text('Cancelar', style: TextStyle(color: Colors.grey[400])),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Cerrar sesión',
-                style: TextStyle(color: Colors.red[400])),
+            child: Text('Cerrar sesión', style: TextStyle(color: Colors.red[400])),
           ),
         ],
       ),
@@ -169,10 +123,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
     }
   }
 
-  // Sidebar solo para DESKTOP
   Widget _buildSidebar() {
-    final name = _userData['full_name']?.toString() ?? 'Freelancer';
-
     return Container(
       width: 240,
       color: Color(0xFF161B22),
@@ -190,22 +141,22 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                       color: Colors.blue[600],
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Icon(Icons.connect_without_contact,
-                        color: Colors.white, size: 20),
+                    child: Icon(Icons.connect_without_contact, color: Colors.white, size: 20),
                   ),
                   SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Corte y Queda',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
-                      Text('SISTEMA OPERATIVO OPERACIONAL',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 9)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Corte y Queda',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold)),
+                        Text('FREELANCER',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 9)),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -213,92 +164,42 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
             Divider(color: Colors.grey[800], height: 1),
             SizedBox(height: 20),
 
-            _buildMenuItem(
-                Icons.dashboard_outlined, 'Panel', true, () {
+            _buildMenuItem(Icons.dashboard_outlined, 'Panel', true, () {
               Navigator.pushNamed(context, '/freelancer_dashboard');
-                }),
-                _buildMenuItem(
-                Icons.dashboard_outlined, 'Activaciones', true, () {
-              Navigator.pushNamed(context, '/freelancer_jobs');
-                }),
-            _buildMenuItem(Icons.person_outline, 'Mi Perfil', false, () {
-              Navigator.pushNamed(context, '/freelancer_profile');
             }),
-            _buildMenuItem(
-                Icons.event_outlined, 'Mis Eventos', false, () {
-              Navigator.pushNamed(context, '/freelancer_events');
-                }),
-            _buildMenuItem(
-                Icons.settings_outlined, 'Configuración', false, () {
-              Navigator.pushNamed(context, '/freelancer_settings');
-                }),
+            _buildMenuItem(Icons.flash_on_outlined, 'Activaciones', false, () {
+              Navigator.pushNamed(context, '/freelancer_activations');
+            }),
+            _buildMenuItem(Icons.person_outline, 'Mi Perfil', false, () {
+              Navigator.pushNamed(context, '/profile');
+            }),
 
             Spacer(),
 
             Container(
               padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border(
-                    top: BorderSide(color: Colors.grey[800]!, width: 1)),
+                border: Border(top: BorderSide(color: Colors.grey[800]!, width: 1)),
               ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey[700],
-                        child: Icon(Icons.person,
-                            color: Colors.white, size: 18),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              name,
-                              style: TextStyle(
-                                  color: Colors.white, fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text('Portal Freelancer',
-                                style: TextStyle(
-                                    color: Colors.grey[500], fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 12),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _logout,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[900]!.withOpacity(0.2),
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        side: BorderSide(color: Colors.red[700]!),
-                        elevation: 0,
-                      ),
-                      icon: Icon(Icons.logout,
-                          color: Colors.red[400], size: 16),
-                      label: Text(
-                        'Cerrar Sesión',
-                        style: TextStyle(
-                          color: Colors.red[400],
-                          fontSize: 13,
-                        ),
-                      ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _logout,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[900]!.withOpacity(0.2),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
                     ),
+                    side: BorderSide(color: Colors.red[700]!),
+                    elevation: 0,
                   ),
-                ],
+                  icon: Icon(Icons.logout, color: Colors.red[400], size: 16),
+                  label: Text(
+                    'Cerrar Sesión',
+                    style: TextStyle(color: Colors.red[400], fontSize: 13),
+                  ),
+                ),
               ),
             ),
           ],
@@ -307,14 +208,11 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
     );
   }
 
-  Widget _buildMenuItem(
-      IconData icon, String title, bool isActive, VoidCallback onTap) {
+  Widget _buildMenuItem(IconData icon, String title, bool isActive, VoidCallback onTap) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: isActive
-            ? Color(0xFF1F6FEB).withOpacity(0.15)
-            : Colors.transparent,
+        color: isActive ? Color(0xFF1F6FEB).withOpacity(0.15) : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         border: isActive
             ? Border.all(color: Color(0xFF1F6FEB).withOpacity(0.4), width: 1)
@@ -328,259 +226,9 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
             style: TextStyle(
                 color: isActive ? Colors.blue[300] : Colors.grey[400],
                 fontSize: 13,
-                fontWeight:
-                    isActive ? FontWeight.w500 : FontWeight.normal)),
+                fontWeight: isActive ? FontWeight.w500 : FontWeight.normal)),
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 0),
         onTap: onTap,
-      ),
-    );
-  }
-
-  Widget _buildProfileCard() {
-    final name = _userData['full_name']?.toString() ?? 'Sin nombre';
-    final email = _userData['email']?.toString() ?? 'Sin correo';
-    final bio = _freelancerProfile['bio']?.toString() ?? 'Sin biografía';
-    final years =
-        _freelancerProfile['years_experience']?.toString() ?? '0';
-    final location =
-        _freelancerProfile['location']?.toString() ?? 'Sin ubicación';
-    final rfc = _freelancerProfile['rfc']?.toString() ?? 'Sin RFC';
-
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Color(0xFF30363D), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.blue[900],
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'F',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name,
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold)),
-                    SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.email_outlined,
-                            color: Colors.grey[500], size: 14),
-                        SizedBox(width: 6),
-                        Text(email,
-                            style: TextStyle(
-                                color: Colors.grey[400], fontSize: 13)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 14),
-
-          Text(bio,
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis),
-          SizedBox(height: 16),
-
-          Row(
-            children: [
-              Expanded(
-                  child: _buildInfoChip(
-                      Icons.work_outline, '$years años exp.', Colors.blue)),
-              SizedBox(width: 10),
-              Expanded(
-                  child: _buildInfoChip(Icons.location_on_outlined, location,
-                      Colors.green)),
-              SizedBox(width: 10),
-              Expanded(
-                  child: _buildInfoChip(
-                      Icons.description_outlined, rfc, Colors.purple)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(
-      IconData icon, String text, MaterialColor color) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color[900]!.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color[700]!.withOpacity(0.4), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color[400], size: 18),
-          SizedBox(height: 6),
-          Text(text,
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRolesTagsSection() {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Color(0xFF30363D), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Habilidades profesionales',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
-          SizedBox(height: 16),
-
-          if (_jobRoles.isNotEmpty) ...[
-            Text('Roles',
-                style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500)),
-            SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _jobRoles.map((role) {
-                final roleName =
-                    role['job_role']?['name']?.toString() ??
-                        role['name']?.toString() ??
-                        'Rol';
-                final years = role['years']?.toString() ?? '0';
-                final level = role['level']?.toString() ?? '1';
-                return Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[900]!.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: Colors.blue[600]!.withOpacity(0.5), width: 1),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(roleName,
-                          style: TextStyle(
-                              color: Colors.blue[300], fontSize: 13)),
-                      SizedBox(width: 6),
-                      Text('• ${years}a Nv.$level',
-                          style: TextStyle(
-                              color: Colors.grey[500], fontSize: 11)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-            SizedBox(height: 16),
-          ],
-
-          if (_tags.isNotEmpty) ...[
-            Text('Tags',
-                style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500)),
-            SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _tags.map((tag) {
-                final tagName =
-                    tag['name']?.toString() ?? 'Tag';
-                return Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.green[900]!.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: Colors.green[600]!.withOpacity(0.5),
-                        width: 1),
-                  ),
-                  child: Text(tagName,
-                      style: TextStyle(
-                          color: Colors.green[300], fontSize: 13)),
-                );
-              }).toList(),
-            ),
-            SizedBox(height: 16),
-          ],
-
-          if (_equipment.isNotEmpty) ...[
-            Text('Equipo',
-                style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500)),
-            SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _equipment.map((equip) {
-                final equipName =
-                    equip['equipment_item']?['name']?.toString() ??
-                        equip['name']?.toString() ??
-                        'Equipo';
-                final qty = equip['quantity']?.toString() ?? '1';
-                return Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.purple[900]!.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: Colors.purple[600]!.withOpacity(0.5),
-                        width: 1),
-                  ),
-                  child: Text('$equipName x$qty',
-                      style: TextStyle(
-                          color: Colors.purple[300], fontSize: 13)),
-                );
-              }).toList(),
-            ),
-          ],
-
-          if (_jobRoles.isEmpty && _tags.isEmpty && _equipment.isEmpty)
-            Text('No tienes habilidades profesionales registradas.',
-                style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-        ],
       ),
     );
   }
@@ -622,40 +270,56 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                   fontWeight: FontWeight.bold)),
           SizedBox(height: 8),
           Text('No tienes actividades urgentes por el momento.',
-              style:
-                  TextStyle(color: Colors.grey[400], fontSize: 14)),
+              style: TextStyle(color: Colors.grey[400], fontSize: 14)),
         ],
       ),
     );
   }
 
-  Widget _buildMetricCard(
-      String title, dynamic value, String subtitle, Color color) {
+  Widget _buildMetricCard(String title, dynamic value, String subtitle, Color color) {
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Color(0xFF30363D), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(value.toString(),
-              style: TextStyle(
-                  color: color,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold)),
-          SizedBox(height: 8),
-          Text(title,
-              style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500)),
-          SizedBox(height: 4),
-          Text(subtitle,
-              style: TextStyle(
-                  color: Colors.grey[600], fontSize: 10)),
+          Text(
+            value.toString(),
+            style: TextStyle(
+              color: color,
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              height: 1.0,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.grey[300],
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.1,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SizedBox(height: 3),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 10,
+              height: 1.1,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -701,8 +365,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                         fontSize: 16,
                         fontWeight: FontWeight.bold)),
                 Text(monthText,
-                    style: TextStyle(
-                        color: Colors.blue[300], fontSize: 12)),
+                    style: TextStyle(color: Colors.blue[300], fontSize: 12)),
               ],
             ),
           ),
@@ -730,8 +393,7 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                                 fontWeight: FontWeight.bold)),
                       ),
                       Container(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: statusColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -751,9 +413,10 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                       Icon(Icons.location_on_outlined,
                           color: Colors.grey[400], size: 16),
                       SizedBox(width: 8),
-                      Text(event['location'],
-                          style: TextStyle(
-                              color: Colors.grey[400], fontSize: 12)),
+                      Expanded(
+                        child: Text(event['location'],
+                            style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                      ),
                     ],
                   ),
                 ],
@@ -803,13 +466,23 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
   }
 
   Widget _buildHeader(bool isMobile) {
-    return Text(
-      'Panel Freelancer',
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: isMobile ? 20 : 28,
-        fontWeight: FontWeight.bold,
-      ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'Panel Freelancer',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: isMobile ? 22 : 28,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        IconButton(
+          icon: Icon(Icons.refresh, color: Colors.white),
+          onPressed: _loadDashboardData,
+          tooltip: 'Actualizar',
+        ),
+      ],
     );
   }
 
@@ -819,23 +492,15 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      
-      // ============================================================
-      // BOTTOM NAVIGATION (solo en móvil, reemplaza drawer)
       bottomNavigationBar: isMobile
           ? FreelancerBottomNav(currentRoute: '/freelancer_dashboard')
           : null,
-      // ============================================================
       
       body: SafeArea(
         child: _isLoading
-            ? Center(
-                child:
-                    CircularProgressIndicator(color: Colors.blue[600]),
-              )
+            ? Center(child: CircularProgressIndicator(color: Colors.blue[600]))
             : Row(
                 children: [
-                  // Sidebar solo en desktop
                   if (!isMobile) _buildSidebar(),
 
                   Expanded(
@@ -844,78 +509,49 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header (sin botón hamburguesa)
-                          if (isMobile) ...[
-                            _buildHeader(isMobile),
-                            SizedBox(height: 16),
-                          ] else ...[
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                _buildHeader(isMobile),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.blue[900]!.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: Colors.blue[400]!, width: 1),
-                                  ),
-                                  child: Text('PORTAL FREELANCER',
-                                      style: TextStyle(
-                                          color: Colors.blue[400],
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold)),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 24),
-                          ],
+                          _buildHeader(isMobile),
+                          SizedBox(height: isMobile ? 16 : 24),
 
                           Expanded(
                             child: SingleChildScrollView(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildProfileCard(),
-                                  SizedBox(height: 24),
                                   _buildUrgentBanner(),
-                                  SizedBox(height: 24),
+                                  SizedBox(height: 20),
+                                  
+                                  // Tarjetas de métricas compactas
                                   GridView.count(
                                     shrinkWrap: true,
                                     physics: NeverScrollableScrollPhysics(),
                                     crossAxisCount: isMobile ? 1 : 3,
-                                    crossAxisSpacing: 16,
-                                    mainAxisSpacing: 16,
-                                    childAspectRatio: isMobile ? 1.5 : 1.2,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    childAspectRatio: isMobile ? 3.5 : 1.6,
                                     children: [
                                       _buildMetricCard(
-                                          'EVENTOS COMPLETADOS',
-                                          '1',
+                                          'Eventos completados',
+                                          _dashboardData['events_completed'],
                                           'Total histórico',
                                           Colors.green[400]!),
                                       _buildMetricCard(
-                                          'TASA DE ACEPTACIÓN',
-                                          '0%',
-                                          'Total histórico',
+                                          'Tasa de aceptación',
+                                          '${_dashboardData['acceptance_rate']}%',
+                                          'Porcentaje de aceptación',
                                           Colors.blue[400]!),
                                       _buildMetricCard(
-                                          'PERFIL COMPLETADO',
-                                          '100%',
-                                          'Totalmente en regla',
+                                          'Perfil completado',
+                                          '${_dashboardData['profile_completion']}%',
+                                          'Estado del perfil',
                                           Colors.purple[400]!),
                                     ],
                                   ),
-                                  SizedBox(height: 32),
-                                  _buildRolesTagsSection(),
-                                  SizedBox(height: 32),
-                                  Text('Próximos eventos (Mis Eventos)',
+                                  
+                                  SizedBox(height: 28),
+                                  Text('Próximos eventos',
                                       style: TextStyle(
                                           color: Colors.white,
-                                          fontSize: 18,
+                                          fontSize: 20,
                                           fontWeight: FontWeight.bold)),
                                   SizedBox(height: 16),
 
@@ -931,14 +567,11 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                                       child: Center(
                                         child: Column(
                                           children: [
-                                            Icon(
-                                                Icons
-                                                    .event_available_outlined,
+                                            Icon(Icons.event_available_outlined,
                                                 color: Colors.grey[600],
                                                 size: 48),
                                             SizedBox(height: 16),
-                                            Text(
-                                                'No tienes eventos próximos',
+                                            Text('No tienes eventos próximos',
                                                 style: TextStyle(
                                                     color: Colors.grey[400],
                                                     fontSize: 16)),
@@ -960,20 +593,17 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                                           .toList(),
                                     ),
 
-                                  SizedBox(height: 32),
+                                  SizedBox(height: 28),
                                   Text('Estado de la bóveda',
                                       style: TextStyle(
                                           color: Colors.white,
-                                          fontSize: 18,
+                                          fontSize: 20,
                                           fontWeight: FontWeight.bold)),
                                   SizedBox(height: 16),
 
-                                  _buildVaultItem(
-                                      'Seguro de responsabilidad civil', true),
-                                  _buildVaultItem(
-                                      'Permiso de trabajo (MX)', true),
-                                  _buildVaultItem(
-                                      'Certificación de salud', false),
+                                  _buildVaultItem('Seguro de responsabilidad civil', true),
+                                  _buildVaultItem('Permiso de trabajo (MX)', true),
+                                  _buildVaultItem('Certificación de salud', false),
 
                                   SizedBox(height: 32),
                                 ],

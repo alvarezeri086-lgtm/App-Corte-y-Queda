@@ -1,11 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Bottom Navigation Bar para usuarios FREELANCER
-/// 
-/// Uso:
-/// ```dart
-/// bottomNavigationBar: FreelancerBottomNav(currentRoute: '/freelancer_dashboard')
-/// ```
 class FreelancerBottomNav extends StatelessWidget {
   final String currentRoute;
 
@@ -38,32 +32,17 @@ class FreelancerBottomNav extends StatelessWidget {
               ),
                _buildNavItem(
                 context: context,
-                icon: Icons.work_outline,
-                activeIcon: Icons.work,
+                icon: Icons.bolt_outlined,
+                activeIcon: Icons.bolt,
                 label: 'Activaciones',
-                route: '/freelancer_jobs',
+                route: '/freelancer_activations',
               ),
               _buildNavItem(
                 context: context,
                 icon: Icons.person_outline,
                 activeIcon: Icons.person,
                 label: 'Mi Perfil',
-                route: '/freelancer_profile',
-              ),
-              _buildNavItem(
-                context: context,
-                icon: Icons.event_outlined,
-                activeIcon: Icons.event,
-                label: 'Mis Eventos',
-                route: '/freelancer_events',
-              ),
-             
-              _buildNavItem(
-                context: context,
-                icon: Icons.settings_outlined,
-                activeIcon: Icons.settings,
-                label: 'Ajustes',
-                route: '/freelancer_settings',
+                route: '/profile',
               ),
             ],
           ),
