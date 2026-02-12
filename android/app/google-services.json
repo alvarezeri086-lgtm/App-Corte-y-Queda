@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "824484220939",
+    "project_id": "corte-y-queda",
+    "storage_bucket": "corte-y-queda.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:824484220939:android:1dcb8cc7d75118bbb6770e",
+        "android_client_info": {
+          "package_name": "com.example.CorteYQueda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5s2dey9focASfjxwAHDjBSpJje2zfERM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
+import '../utils/error_handler.dart';
 
 class CreateEventPage extends StatefulWidget {
   final VoidCallback? onEventCreated;
@@ -93,23 +94,17 @@ class _CreateEventPageState extends State<CreateEventPage> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_startDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Por favor selecciona una fecha de inicio')),
-      );
+      _showErrorSnackBar('Por favor selecciona una fecha de inicio');
       return;
     }
 
     if (_endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Por favor selecciona una fecha de fin')),
-      );
+      _showErrorSnackBar('Por favor selecciona una fecha de fin');
       return;
     }
 
     if (_endDate!.isBefore(_startDate!)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('La fecha de fin debe ser posterior a la fecha de inicio')),
-      );
+      _showErrorSnackBar('La fecha de fin debe ser posterior a la fecha de inicio');
       return;
     }
 
@@ -118,9 +113,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
     final token = authProvider.accessToken;
 
     if (token == null || baseUrl == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: No autenticado o API no configurada')),
-      );
+      _showErrorSnackBar('Error de autenticación. Por favor inicia sesión nuevamente');
       return;
     }
 
@@ -129,6 +122,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
     });
 
     try {
+      // Enviar payment_terms_days como string
       final Map<String, dynamic> data = {
         "title": _titleController.text.trim(),
         "description": _descriptionController.text.trim(),
@@ -137,11 +131,10 @@ class _CreateEventPageState extends State<CreateEventPage> {
         "location": _locationController.text.trim(),
         "requires_documents": _requiresDocuments,
         "requires_interview": _requiresInterview,
-        "payment_terms_days": int.tryParse(_paymentTermsController.text.trim()) ?? 0,
+        "payment_terms_days": _paymentTermsController.text.trim().isEmpty 
+            ? "1" 
+            : _paymentTermsController.text.trim(),
       };
-
-      print(' CREANDO EVENTO ...');
-      print('Datos: $data');
 
       final response = await http.post(
         Uri.parse('$baseUrl/events/'),
@@ -151,18 +144,10 @@ class _CreateEventPageState extends State<CreateEventPage> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode(data),
-      ).timeout(Duration(seconds: 30));
+      ).timeout(Duration(seconds: 15));
 
-      print('Respuesta: ${response.statusCode} - ${response.body}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('¡Evento creado exitosamente!'),
-            backgroundColor: Colors.green[600],
-            duration: Duration(seconds: 3),
-          ),
-        );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        _showSuccessSnackBar('¡Llamado creado exitosamente!');
 
         if (widget.onEventCreated != null) {
           widget.onEventCreated!();
@@ -174,51 +159,27 @@ class _CreateEventPageState extends State<CreateEventPage> {
           Navigator.pop(context);
         }
       } else {
-        String errorMessage = 'Error al crear evento: ${response.statusCode}';
+        // Manejo de errores mejorado
+        String errorMessage = 'No se pudo crear el llamado';
+        
         try {
           final errorData = jsonDecode(response.body);
-          if (errorData['detail'] != null) {
+          if (errorData is Map && errorData.containsKey('detail')) {
             errorMessage = errorData['detail'].toString();
-          } else if (errorData is Map) {
-            final errors = <String>[];
-            errorData.forEach((key, value) {
-              if (value is List) {
-                errors.add('$key: ${value.join(', ')}');
-              } else {
-                errors.add('$key: $value');
-              }
-            });
-            if (errors.isNotEmpty) {
-              errorMessage = errors.join('\n');
-            }
+          } else if (errorData is Map && errorData.containsKey('message')) {
+            errorMessage = errorData['message'].toString();
           }
         } catch (e) {
-          print('Error parsing response: $e');
+          // Error al parsear respuesta
         }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red[600],
-            duration: Duration(seconds: 5),
-          ),
-        );
+
+        _showErrorSnackBar(errorMessage);
       }
-    } on TimeoutException {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('El servidor tardó demasiado en responder'),
-          backgroundColor: Colors.red[600],
-        ),
-      );
+    } on TimeoutException catch (_) {
+      _showErrorSnackBar('La solicitud tardó demasiado. Verifica tu conexión');
     } catch (e) {
       print('Error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error de conexión: ${e.toString()}'),
-          backgroundColor: Colors.red[600],
-        ),
-      );
+      _showErrorSnackBar('No se pudo crear el llamado. Intenta nuevamente');
     } finally {
       if (mounted) {
         setState(() {
@@ -226,6 +187,44 @@ class _CreateEventPageState extends State<CreateEventPage> {
         });
       }
     }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.green[600],
+        duration: Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.white),
+            SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red[600],
+        duration: Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   Widget _buildDateField(String label, DateTime? date, VoidCallback onTap) {
@@ -342,7 +341,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Nuevo Evento',
+          'Nuevo Llamado',
           style: TextStyle(color: Colors.white),
         ),
         elevation: 0,
@@ -375,7 +374,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
                         ),
                         SizedBox(height: 8),
                         Text(
-                          'Nueva Orden de Evento',
+                          'Nueva Orden de Llamado',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: isMobile ? 20 : 24,
@@ -406,7 +405,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Nombre del Proyecto',
+                          'Nombre del llamado',
                           style: TextStyle(
                             color: Colors.grey[400],
                             fontSize: isMobile ? 11 : 12,
@@ -444,7 +443,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'El nombre del proyecto es requerido';
+                              return 'El nombre del llamado es requerido';
                             }
                             return null;
                           },
@@ -512,7 +511,6 @@ class _CreateEventPageState extends State<CreateEventPage> {
                             ],
                           )
                         else
-                          
                           Row(
                             children: [
                               Expanded(
@@ -581,9 +579,8 @@ class _CreateEventPageState extends State<CreateEventPage> {
                         ),
                         SizedBox(height: isMobile ? 16 : 20),
 
-                        // Payment Terms
                         Text(
-                          'Términos de Pago',
+                          'Días de Pago',
                           style: TextStyle(
                             color: Colors.grey[400],
                             fontSize: isMobile ? 11 : 12,
@@ -593,12 +590,13 @@ class _CreateEventPageState extends State<CreateEventPage> {
                         SizedBox(height: 8),
                         TextFormField(
                           controller: _paymentTermsController,
+                          keyboardType: TextInputType.number,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: isMobile ? 14 : 14,
                           ),
                           decoration: InputDecoration(
-                            hintText: '1 Día',
+                            hintText: '1',
                             hintStyle: TextStyle(
                               color: Colors.grey[600],
                               fontSize: isMobile ? 14 : 14,
@@ -621,14 +619,17 @@ class _CreateEventPageState extends State<CreateEventPage> {
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Los términos de pago son requeridos';
+                              return 'Los días de pago son requeridos';
+                            }
+                            final number = int.tryParse(value.trim());
+                            if (number == null || number < 1) {
+                              return 'Debe ser un número válido mayor a 0';
                             }
                             return null;
                           },
                         ),
                         SizedBox(height: isMobile ? 16 : 20),
 
-                        // Validations Section
                         Text(
                           'VALIDACIONES',
                           style: TextStyle(
@@ -639,15 +640,15 @@ class _CreateEventPageState extends State<CreateEventPage> {
                         ),
                         SizedBox(height: isMobile ? 8 : 12),
                         _buildCheckbox(
-                          'Documentos',
-                          'Auditoría requerida',
+                          'Documentacion requerida',
+                          'El rol requiere documentación vigente',
                           _requiresDocuments,
                           (value) => setState(() => _requiresDocuments = value ?? false),
                         ),
                         SizedBox(height: isMobile ? 8 : 12),
                         _buildCheckbox(
-                          'Entrevista',
-                          'Sincronización requerida',
+                          'Entrevista previa',
+                          'Se requiere validacion previa ',
                           _requiresInterview,
                           (value) => setState(() => _requiresInterview = value ?? false),
                         ),
@@ -655,7 +656,6 @@ class _CreateEventPageState extends State<CreateEventPage> {
                     ),
                   ),
 
-                  // Action Button
                   SizedBox(height: isMobile ? 24 : 32),
                   Center(
                     child: SizedBox(
@@ -684,7 +684,7 @@ class _CreateEventPageState extends State<CreateEventPage> {
                                 ),
                               )
                             : Text(
-                                'Activar Orden',
+                                'Activar Llamado',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: isMobile ? 14 : 16,

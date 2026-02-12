@@ -16,24 +16,23 @@ class CompleteProfilePage2 extends StatefulWidget {
 }
 
 class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
-  
   List<Map<String, dynamic>> _rolesDisponibles = [];
   List<Map<String, dynamic>> _habilidadesDisponibles = [];
   List<Map<String, dynamic>> _equiposDisponibles = [];
-  
+
   List<Map<String, dynamic>> _rolesSeleccionados = [];
   List<String> _habilidadesSeleccionadasIds = [];
   List<Map<String, dynamic>> _equiposSeleccionados = [];
 
-  final _nombreRolController = TextEditingController(); 
+  final _nombreRolController = TextEditingController();
   final _aniosRolController = TextEditingController();
   final _nivelRolController = TextEditingController();
-  final _nombreHabilidadController = TextEditingController(); 
-  final _nombreEquipoController = TextEditingController(); 
+  final _nombreHabilidadController = TextEditingController();
+  final _nombreEquipoController = TextEditingController();
   final _cantidadEquipoController = TextEditingController();
   final _notasEquipoController = TextEditingController();
   final _experienciaEquipoController = TextEditingController();
-  
+
   bool _cargando = true;
   bool _poseoEquipo = false;
   bool _tengoExperiencia = false;
@@ -85,8 +84,6 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
     }
 
     try {
-      print('CARGANDO DATOS DEL SERVIDOR...');
-      
       final resultados = await Future.wait([
         http.get(
           Uri.parse('$urlBase/job-roles/'),
@@ -119,15 +116,13 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
       final respuestaEquipos = resultados[2];
 
       if (!mounted) return;
-      
+
       setState(() {
-        
         if (respuestaRoles.statusCode == 200) {
           final datosRoles = jsonDecode(respuestaRoles.body);
           if (datosRoles is List) {
-            _rolesDisponibles = datosRoles
-                .map((item) => item as Map<String, dynamic>)
-                .toList();
+            _rolesDisponibles =
+                datosRoles.map((item) => item as Map<String, dynamic>).toList();
           }
         }
 
@@ -151,17 +146,14 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
 
         _cargando = false;
       });
-      
-      if (_rolesDisponibles.isEmpty && _habilidadesDisponibles.isEmpty && _equiposDisponibles.isEmpty) {
-        print(' ADVERTENCIA: No se encontraron datos en el servidor');
-      }
+
     } catch (e) {
       print('ERROR al cargar datos: $e');
       if (!mounted) return;
       setState(() {
         _cargando = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al cargar datos del servidor')),
@@ -193,7 +185,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
         final nuevoRol = jsonDecode(respuesta.body);
         setState(() {
           _rolesDisponibles.add(nuevoRol);
-          _rolSeleccionadoId = nuevoRol['id']; 
+          _rolSeleccionadoId = nuevoRol['id'];
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Rol creado exitosamente')),
@@ -273,7 +265,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
         final nuevoEquipo = jsonDecode(respuesta.body);
         setState(() {
           _equiposDisponibles.add(nuevoEquipo);
-          _equipoSeleccionadoId = nuevoEquipo['id']; 
+          _equipoSeleccionadoId = nuevoEquipo['id'];
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Equipo creado exitosamente')),
@@ -289,6 +281,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
       );
     }
   }
+
   void _agregarHabilidad(String idHabilidad, String nombreHabilidad) {
     if (_habilidadesSeleccionadasIds.contains(idHabilidad)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -316,6 +309,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
 
     await _crearHabilidad(nombreHabilidad);
   }
+
   void _quitarHabilidad(int indice) {
     setState(() {
       _habilidadesSeleccionadasIds.removeAt(indice);
@@ -324,8 +318,9 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
   }
 
   void _agregarRol() async {
-   
-    if (_rolesDisponibles.isEmpty || (_nombreRolController.text.trim().isNotEmpty && _rolSeleccionadoId == null)) {
+    if (_rolesDisponibles.isEmpty ||
+        (_nombreRolController.text.trim().isNotEmpty &&
+            _rolSeleccionadoId == null)) {
       if (_nombreRolController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Por favor ingresa el nombre del rol')),
@@ -360,7 +355,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             'years': anios,
             'level': nivel,
           });
-          
+
           _rolesUsuario.add({
             'name': nombreRol,
             'years': anios,
@@ -411,7 +406,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
         'years': anios,
         'level': nivel,
       });
-      
+
       _rolesUsuario.add({
         'name': rolSeleccionado['name'] ?? 'Rol',
         'years': anios,
@@ -423,6 +418,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
       _nivelRolController.clear();
     });
   }
+
   void _quitarRol(int indice) {
     setState(() {
       _rolesSeleccionados.removeAt(indice);
@@ -432,16 +428,21 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
 
   void _agregarEquipo() async {
     final cantidad = int.tryParse(_cantidadEquipoController.text) ?? 0;
-    final aniosExperiencia = int.tryParse(_experienciaEquipoController.text) ?? 0;
+    final aniosExperiencia =
+        int.tryParse(_experienciaEquipoController.text) ?? 0;
 
     if (_poseoEquipo && _tengoExperiencia) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Solo puedes seleccionar "Lo tengo" O "Tengo experiencia", no ambos')),
+        SnackBar(
+            content: Text(
+                'Solo puedes seleccionar "Lo tengo" O "Tengo experiencia", no ambos')),
       );
       return;
     }
 
-    if (_equiposDisponibles.isEmpty || (_nombreEquipoController.text.trim().isNotEmpty && _equipoSeleccionadoId == null)) {
+    if (_equiposDisponibles.isEmpty ||
+        (_nombreEquipoController.text.trim().isNotEmpty &&
+            _equipoSeleccionadoId == null)) {
       if (_nombreEquipoController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Por favor ingresa el nombre del equipo')),
@@ -524,6 +525,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
       _tengoExperiencia = false;
     });
   }
+
   void _quitarEquipo(int indice) {
     setState(() {
       _equiposSeleccionados.removeAt(indice);
@@ -531,183 +533,149 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
     });
   }
 
- Future<void> _guardarPerfil() async {
-  final urlBase = dotenv.env['API_BASE_URL'];
-  if (urlBase == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: No se configuró la URL base')),
-    );
-    return;
-  }
-
-  final proveedorAuth = Provider.of<AuthProvider>(context, listen: false);
-  final token = proveedorAuth.accessToken;
-
-  if (token == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: No estás autenticado')),
-    );
-    return;
-  }
-
-  if (_habilidadesSeleccionadasIds.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Por favor agrega al menos una habilidad')),
-    );
-    return;
-  }
-
-  final url = Uri.parse('$urlBase/freelancer/profile/upsert-roles');
-
-  try {
-    final datos = {
-      'job_roles': _rolesSeleccionados,
-      'tag_ids': _habilidadesSeleccionadasIds,
-      'equipment': _equiposSeleccionados,
-    };
-
-    print('=== GUARDANDO PERFIL ===');
-    print('URL: $url');
-    print('Datos a enviar:');
-    print('Job Roles (${_rolesSeleccionados.length}): $_rolesSeleccionados');
-    print('Tag IDs (${_habilidadesSeleccionadasIds.length}): $_habilidadesSeleccionadasIds');
-    print('Equipment (${_equiposSeleccionados.length}): $_equiposSeleccionados');
-    print('JSON completo: ${jsonEncode(datos)}');
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(
-        child: CircularProgressIndicator(color: Colors.blue[600]),
-      ),
-    );
-
-    final respuesta = await http.put(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode(datos),
-    ).timeout(
-      Duration(seconds: 30),
-      onTimeout: () {
-        throw TimeoutException('El servidor tardó demasiado en responder');
-      },
-    );
-
-    print('RESPUESTA DEL SERVIDOR');
-    print('Status Code: ${respuesta.statusCode}');
-    print('Headers: ${respuesta.headers}');
-    print('Body: ${respuesta.body}');
-
-    if (Navigator.canPop(context)) {
-      Navigator.of(context).pop();
+  Future<void> _guardarPerfil() async {
+    final urlBase = dotenv.env['API_BASE_URL'];
+    if (urlBase == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: No se configuró la URL base')),
+      );
+      return;
     }
 
-    if (respuesta.statusCode == 200) {
-      try {
-        final datosRespuesta = jsonDecode(respuesta.body);
-        print('DATOS GUARDADOS EN EL BACKEND');
-        print('Respuesta parseada: $datosRespuesta');
-        
-        if (datosRespuesta is Map) {
-          print('Job Roles en respuesta: ${datosRespuesta['job_roles']}');
-          print('Tags en respuesta: ${datosRespuesta['tags']}');
-          print('Equipment en respuesta: ${datosRespuesta['equipment']}');
-        }
-      } catch (e) {
-        print('Error al parsear respuesta: $e');
-      }
+    final proveedorAuth = Provider.of<AuthProvider>(context, listen: false);
+    final token = proveedorAuth.accessToken;
 
+    if (token == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('¡Perfil guardado exitosamente!'),
-          backgroundColor: Colors.green[600],
-          duration: Duration(seconds: 3),
+        SnackBar(content: Text('Error: No estás autenticado')),
+      );
+      return;
+    }
+
+    if (_habilidadesSeleccionadasIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Por favor agrega al menos una habilidad')),
+      );
+      return;
+    }
+
+    final url = Uri.parse('$urlBase/freelancer/profile/upsert-roles');
+
+    try {
+      final datos = {
+        'job_roles': _rolesSeleccionados,
+        'tag_ids': _habilidadesSeleccionadasIds,
+        'equipment': _equiposSeleccionados,
+      };
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: CircularProgressIndicator(color: Colors.blue[600]),
         ),
       );
 
-      await Future.delayed(Duration(milliseconds: 1500));
-      
-      print('ACTUALIZANDO PERFIL FREELANCER');
-      await proveedorAuth.refreshFreelancerProfile();
-      
-      await Future.delayed(Duration(milliseconds: 1000));
-      
-      print('VERIFICANDO ESTADO DEL PERFIL ');
-      print('Perfil completo: ${proveedorAuth.isFullProfileComplete}');
-      print('Perfil básico completo: ${proveedorAuth.isBasicProfileComplete}');
-      
-      final userInfo = proveedorAuth.userInfo;
-      if (userInfo != null && userInfo['freelancer_profile'] != null) {
-        final profile = userInfo['freelancer_profile'];
-        print(' VERIFICACIÓN POST-GUARDADO ');
-        print('Job Roles en estado local: ${profile['job_roles']?.length ?? 0}');
-        print('Tags en estado local: ${profile['tags']?.length ?? 0}');
-        print('Equipment en estado local: ${profile['equipment']?.length ?? 0}');
+      final respuesta = await http
+          .put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(datos),
+      )
+          .timeout(
+        Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException('El servidor tardó demasiado en responder');
+        },
+      );
+
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
       }
-      
-      if (proveedorAuth.isFullProfileComplete) {
-        print(' PERFIL COMPLETO - Redirigiendo a dashboard');
-        Navigator.pushReplacementNamed(context, '/freelancer_dashboard');
-      } else {
-        print(' PERFIL INCOMPLETO - Mostrando advertencia');
-        
+
+      if (respuesta.statusCode == 200) {
+        try {
+          final datosRespuesta = jsonDecode(respuesta.body);
+        } catch (e) {
+          print('Error al parsear respuesta: $e');
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Perfil guardado, pero aún faltan datos. Actualizando...'),
-            backgroundColor: Colors.orange[600],
-            duration: Duration(seconds: 4),
+            content: Text('¡Perfil guardado exitosamente!'),
+            backgroundColor: Colors.green[600],
+            duration: Duration(seconds: 3),
           ),
         );
-        
-        await Future.delayed(Duration(seconds: 2));
+
+        await Future.delayed(Duration(milliseconds: 1500));
+
         await proveedorAuth.refreshFreelancerProfile();
-        
+
+        await Future.delayed(Duration(milliseconds: 1000));
+
+        final userInfo = proveedorAuth.userInfo;
+
         if (proveedorAuth.isFullProfileComplete) {
           Navigator.pushReplacementNamed(context, '/freelancer_dashboard');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: No se pudieron cargar los datos. Intenta cerrar sesión y volver a iniciar.'),
-              backgroundColor: Colors.red[600],
-              duration: Duration(seconds: 5),
+              content: Text(
+                  'Perfil guardado, pero aún faltan datos. Actualizando...'),
+              backgroundColor: Colors.orange[600],
+              duration: Duration(seconds: 4),
             ),
           );
+
+          await Future.delayed(Duration(seconds: 2));
+          await proveedorAuth.refreshFreelancerProfile();
+
+          if (proveedorAuth.isFullProfileComplete) {
+            Navigator.pushReplacementNamed(context, '/freelancer_dashboard');
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Error: No se pudieron cargar los datos. Intenta cerrar sesión y volver a iniciar.'),
+                backgroundColor: Colors.red[600],
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
         }
-      }
-    } else {
-      String mensajeError = 'Error al actualizar el perfil: ${respuesta.statusCode}';
-      try {
-        final datosError = jsonDecode(respuesta.body);
-        print('ERROR DEL BACKEND');
-        print('Error completo: $datosError');
-        if (datosError['detail'] != null) {
-          mensajeError = datosError['detail'].toString();
+      } else {
+        String mensajeError =
+            'Error al actualizar el perfil: ${respuesta.statusCode}';
+        try {
+          final datosError = jsonDecode(respuesta.body);
+          if (datosError['detail'] != null) {
+            mensajeError = datosError['detail'].toString();
+          }
+        } catch (e) {
+          print('Error al parsear error: $e');
         }
-      } catch (e) {
-        print('Error al parsear error: $e');
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensajeError)),
+        );
       }
-      
+    } catch (e) {
+      print('Error: $e');
+
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensajeError)),
+        SnackBar(content: Text('Error de conexión: Verifica tu internet')),
       );
     }
-  } catch (e) {
-    print(' EXCEPCIÓN AL GUARDAR');
-    print('Error: $e');
-    
-    if (Navigator.canPop(context)) {
-      Navigator.of(context).pop();
-    }
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error de conexión: Verifica tu internet')),
-    );
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -793,13 +761,15 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
           ),
           Divider(color: Colors.grey[800], height: 1),
           SizedBox(height: 20),
-          _construirElementoMenu(Icons.dashboard_outlined, 'Panel de Control', false),
+          _construirElementoMenu(
+              Icons.dashboard_outlined, 'Panel de Control', false),
           _construirElementoMenu(Icons.person_outline, 'Perfil', true),
           Spacer(),
           Container(
             padding: EdgeInsets.all(16),
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.grey[800]!, width: 1)),
+              border:
+                  Border(top: BorderSide(color: Colors.grey[800]!, width: 1)),
             ),
             child: Row(
               children: [
@@ -820,7 +790,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text('Plan Pro',
-                          style: TextStyle(color: Colors.grey[500], fontSize: 10)),
+                          style:
+                              TextStyle(color: Colors.grey[500], fontSize: 10)),
                     ],
                   ),
                 ),
@@ -905,26 +876,23 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
           ],
         ),
         SizedBox(height: esMovil ? 24 : 32),
-
         Text('Paso 2: Detalles Profesionales',
             style: TextStyle(
                 color: Colors.white,
                 fontSize: esMovil ? 20 : 24,
                 fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text('Agrega tus roles, habilidades y equipo para coincidir con proyectos.',
-            style: TextStyle(color: Colors.grey[400], fontSize: esMovil ? 12 : 14)),
+        Text(
+            'Agrega tus roles, habilidades y equipo para coincidir con proyectos.',
+            style: TextStyle(
+                color: Colors.grey[400], fontSize: esMovil ? 12 : 14)),
         SizedBox(height: esMovil ? 24 : 32),
-
         _construirSeccionRoles(esMovil),
         SizedBox(height: 24),
-
         _construirSeccionHabilidades(esMovil),
         SizedBox(height: 24),
-
         _construirSeccionEquipos(esMovil),
         SizedBox(height: 32),
-
         ElevatedButton(
           onPressed: _guardarPerfil,
           style: ElevatedButton.styleFrom(
@@ -938,9 +906,10 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
           ),
           child: Text('Completar Perfil y Guardar',
               style: TextStyle(
-                  color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500)),
         ),
-
         if (esMovil) ...[
           SizedBox(height: 32),
           _construirVistaPreviaPortafolio(),
@@ -948,6 +917,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
       ],
     );
   }
+
   Widget _construirSeccionRoles(bool esMovil) {
     return Container(
       padding: EdgeInsets.all(esMovil ? 16 : 24),
@@ -971,7 +941,6 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             ],
           ),
           SizedBox(height: 16),
-
           if (_rolesDisponibles.isNotEmpty) ...[
             Container(
               padding: EdgeInsets.symmetric(horizontal: 12),
@@ -983,7 +952,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   isExpanded: true,
-                  hint: Text('Seleccionar rol existente...', style: TextStyle(color: Colors.grey[600])),
+                  hint: Text('Seleccionar rol existente...',
+                      style: TextStyle(color: Colors.grey[600])),
                   value: _rolSeleccionadoId,
                   dropdownColor: Color(0xFF161B22),
                   style: TextStyle(color: Colors.white),
@@ -997,25 +967,26 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                   onChanged: (valor) {
                     setState(() {
                       _rolSeleccionadoId = valor;
-                      _nombreRolController.clear(); 
+                      _nombreRolController.clear();
                     });
                   },
                 ),
               ),
             ),
             SizedBox(height: 12),
-            
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
                     controller: _nombreRolController,
-                    style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
-                    decoration: _decoracionCampo('O crear nuevo rol...', esMovil),
+                    style: TextStyle(
+                        color: Colors.white, fontSize: esMovil ? 13 : 14),
+                    decoration:
+                        _decoracionCampo('O crear nuevo rol...', esMovil),
                     onChanged: (valor) {
                       if (valor.isNotEmpty) {
                         setState(() {
-                          _rolSeleccionadoId = null; 
+                          _rolSeleccionadoId = null;
                         });
                       }
                     },
@@ -1023,16 +994,15 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                 ),
               ],
             ),
-          ]
-          
-          else ...[
+          ] else ...[
             TextFormField(
               controller: _nombreRolController,
-              style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
-              decoration: _decoracionCampo('Nombre del rol (ej: Director de fotografía)', esMovil),
+              style:
+                  TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
+              decoration: _decoracionCampo(
+                  'Nombre del rol (ej: Director de fotografía)', esMovil),
             ),
           ],
-          
           SizedBox(height: 12),
           Row(
             children: [
@@ -1040,7 +1010,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                 child: TextFormField(
                   controller: _aniosRolController,
                   keyboardType: TextInputType.number,
-                  style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
+                  style: TextStyle(
+                      color: Colors.white, fontSize: esMovil ? 13 : 14),
                   decoration: _decoracionCampo('Años', esMovil),
                 ),
               ),
@@ -1049,7 +1020,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                 child: TextFormField(
                   controller: _nivelRolController,
                   keyboardType: TextInputType.number,
-                  style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
+                  style: TextStyle(
+                      color: Colors.white, fontSize: esMovil ? 13 : 14),
                   decoration: _decoracionCampo('Nivel (1-5)', esMovil),
                 ),
               ),
@@ -1069,14 +1041,13 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             ],
           ),
           SizedBox(height: 16),
-
-          
           if (_rolesUsuario.isEmpty)
             Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text('No has agregado roles aún',
-                    style: TextStyle(color: Colors.grey[600], fontSize: esMovil ? 11 : 12)),
+                    style: TextStyle(
+                        color: Colors.grey[600], fontSize: esMovil ? 11 : 12)),
               ),
             )
           else
@@ -1098,15 +1069,20 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(rol['name'],
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
                           SizedBox(height: 4),
                           Text('${rol['years']} años • Nivel ${rol['level']}',
-                              style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                              style: TextStyle(
+                                  color: Colors.grey[400], fontSize: 11)),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.close, color: Colors.grey[400], size: 18),
+                      icon:
+                          Icon(Icons.close, color: Colors.grey[400], size: 18),
                       onPressed: () => _quitarRol(indice),
                     ),
                   ],
@@ -1131,7 +1107,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
         children: [
           Row(
             children: [
-              Icon(Icons.local_offer_outlined, color: Colors.grey[400], size: 20),
+              Icon(Icons.local_offer_outlined,
+                  color: Colors.grey[400], size: 20),
               SizedBox(width: 8),
               Text('Habilidades',
                   style: TextStyle(
@@ -1141,14 +1118,15 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             ],
           ),
           SizedBox(height: 16),
-
           Row(
             children: [
               Expanded(
                 child: TextFormField(
                   controller: _nombreHabilidadController,
-                  style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
-                  decoration: _decoracionCampo('Agregar nueva habilidad...', esMovil),
+                  style: TextStyle(
+                      color: Colors.white, fontSize: esMovil ? 13 : 14),
+                  decoration:
+                      _decoracionCampo('Agregar nueva habilidad...', esMovil),
                   onFieldSubmitted: (_) => _agregarHabilidadManual(),
                 ),
               ),
@@ -1168,32 +1146,39 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             ],
           ),
           SizedBox(height: 16),
-
           if (_habilidadesDisponibles.isNotEmpty) ...[
-                Text('O selecciona de la lista:',
-                style: TextStyle(color: Colors.grey[500], fontSize: esMovil ? 11 : 12)),
+            Text('O selecciona de la lista:',
+                style: TextStyle(
+                    color: Colors.grey[500], fontSize: esMovil ? 11 : 12)),
             SizedBox(height: 8),
             Wrap(
               spacing: 8.0,
               runSpacing: 8.0,
               children: _habilidadesDisponibles.map((habilidad) {
-                final estaSeleccionada = _habilidadesSeleccionadasIds.contains(habilidad['id']);
+                final estaSeleccionada =
+                    _habilidadesSeleccionadasIds.contains(habilidad['id']);
                 return GestureDetector(
                   onTap: () {
                     if (estaSeleccionada) {
-                      final indice = _habilidadesSeleccionadasIds.indexOf(habilidad['id']);
+                      final indice =
+                          _habilidadesSeleccionadasIds.indexOf(habilidad['id']);
                       _quitarHabilidad(indice);
                     } else {
-                      _agregarHabilidad(habilidad['id'], habilidad['name'] ?? 'Sin nombre');
+                      _agregarHabilidad(
+                          habilidad['id'], habilidad['name'] ?? 'Sin nombre');
                     }
                   },
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: estaSeleccionada ? Colors.blue[600] : Color(0xFF2D3748),
+                      color: estaSeleccionada
+                          ? Colors.blue[600]
+                          : Color(0xFF2D3748),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: estaSeleccionada ? Colors.blue[400]! : Color(0xFF4A5568),
+                        color: estaSeleccionada
+                            ? Colors.blue[400]!
+                            : Color(0xFF4A5568),
                         width: 1,
                       ),
                     ),
@@ -1202,10 +1187,11 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                       children: [
                         if (estaSeleccionada)
                           Icon(Icons.check, color: Colors.white, size: 14),
-                        if (estaSeleccionada)
-                          SizedBox(width: 4),
+                        if (estaSeleccionada) SizedBox(width: 4),
                         Text(habilidad['name'] ?? 'Sin nombre',
-                            style: TextStyle(color: Colors.white, fontSize: esMovil ? 11 : 13)),
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: esMovil ? 11 : 13)),
                       ],
                     ),
                   ),
@@ -1214,18 +1200,19 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             ),
             SizedBox(height: 16),
           ],
-
           if (_habilidadesUsuario.isEmpty)
             Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text('No has agregado habilidades aún',
-                    style: TextStyle(color: Colors.grey[600], fontSize: esMovil ? 11 : 12)),
+                    style: TextStyle(
+                        color: Colors.grey[600], fontSize: esMovil ? 11 : 12)),
               ),
             )
           else ...[
             Text('Habilidades agregadas:',
-                style: TextStyle(color: Colors.grey[400], fontSize: esMovil ? 11 : 12)),
+                style: TextStyle(
+                    color: Colors.grey[400], fontSize: esMovil ? 11 : 12)),
             SizedBox(height: 8),
             Wrap(
               spacing: 8.0,
@@ -1246,7 +1233,9 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                       Icon(Icons.check_circle, color: Colors.white, size: 14),
                       SizedBox(width: 4),
                       Text(habilidad['name'],
-                          style: TextStyle(color: Colors.white, fontSize: esMovil ? 11 : 13)),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: esMovil ? 11 : 13)),
                       SizedBox(width: 6),
                       GestureDetector(
                         onTap: () => _quitarHabilidad(indice),
@@ -1276,7 +1265,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
         children: [
           Row(
             children: [
-              Icon(Icons.camera_alt_outlined, color: Colors.grey[400], size: 20),
+              Icon(Icons.camera_alt_outlined,
+                  color: Colors.grey[400], size: 20),
               SizedBox(width: 8),
               Text('Equipos (Opcional)',
                   style: TextStyle(
@@ -1286,7 +1276,6 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             ],
           ),
           SizedBox(height: 16),
-
           if (_equiposDisponibles.isNotEmpty) ...[
             Container(
               padding: EdgeInsets.symmetric(horizontal: 12),
@@ -1298,7 +1287,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   isExpanded: true,
-                  hint: Text('Seleccionar equipo existente...', style: TextStyle(color: Colors.grey[600])),
+                  hint: Text('Seleccionar equipo existente...',
+                      style: TextStyle(color: Colors.grey[600])),
                   value: _equipoSeleccionadoId,
                   dropdownColor: Color(0xFF161B22),
                   style: TextStyle(color: Colors.white),
@@ -1312,45 +1302,43 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                   onChanged: (valor) {
                     setState(() {
                       _equipoSeleccionadoId = valor;
-                      _nombreEquipoController.clear(); 
+                      _nombreEquipoController.clear();
                     });
                   },
                 ),
               ),
             ),
             SizedBox(height: 12),
-            
             TextFormField(
               controller: _nombreEquipoController,
-              style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
+              style:
+                  TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
               decoration: _decoracionCampo('O crear nuevo equipo...', esMovil),
               onChanged: (valor) {
                 if (valor.isNotEmpty) {
                   setState(() {
-                    _equipoSeleccionadoId = null; 
+                    _equipoSeleccionadoId = null;
                   });
                 }
               },
             ),
-          ]
-          
-          else ...[
+          ] else ...[
             TextFormField(
               controller: _nombreEquipoController,
-              style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
+              style:
+                  TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
               decoration: _decoracionCampo('Nombre del equipo', esMovil),
             ),
           ],
-          
           SizedBox(height: 12),
-          
           Row(
             children: [
               Expanded(
                 child: TextFormField(
                   controller: _cantidadEquipoController,
                   keyboardType: TextInputType.number,
-                  style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
+                  style: TextStyle(
+                      color: Colors.white, fontSize: esMovil ? 13 : 14),
                   decoration: _decoracionCampo('Cantidad', esMovil),
                 ),
               ),
@@ -1359,20 +1347,21 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                 flex: 2,
                 child: TextFormField(
                   controller: _notasEquipoController,
-                  style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
+                  style: TextStyle(
+                      color: Colors.white, fontSize: esMovil ? 13 : 14),
                   decoration: _decoracionCampo('Notas', esMovil),
                 ),
               ),
             ],
           ),
           SizedBox(height: 12),
-
           Row(
             children: [
               Expanded(
                 child: CheckboxListTile(
                   title: Text('Lo tengo',
-                      style: TextStyle(color: Colors.white, fontSize: esMovil ? 12 : 13)),
+                      style: TextStyle(
+                          color: Colors.white, fontSize: esMovil ? 12 : 13)),
                   value: _poseoEquipo,
                   onChanged: (valor) {
                     setState(() {
@@ -1382,12 +1371,16 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                   },
                   activeColor: Colors.blue[600],
                   contentPadding: EdgeInsets.zero,
+                  dense: true, // Hace más compacto
+                  controlAffinity: ListTileControlAffinity
+                      .leading, // Checkbox a la izquierda
                 ),
               ),
               Expanded(
                 child: CheckboxListTile(
                   title: Text('Tengo experiencia',
-                      style: TextStyle(color: Colors.white, fontSize: esMovil ? 12 : 13)),
+                      style: TextStyle(
+                          color: Colors.white, fontSize: esMovil ? 12 : 13)),
                   value: _tengoExperiencia,
                   onChanged: (valor) {
                     setState(() {
@@ -1397,21 +1390,12 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                   },
                   activeColor: Colors.blue[600],
                   contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
                 ),
               ),
             ],
           ),
-
-          if (_tengoExperiencia) ...[
-            SizedBox(height: 12),
-            TextFormField(
-              controller: _experienciaEquipoController,
-              keyboardType: TextInputType.number,
-              style: TextStyle(color: Colors.white, fontSize: esMovil ? 13 : 14),
-              decoration: _decoracionCampo('Años de experiencia', esMovil),
-            ),
-          ],
-          
           SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,
@@ -1429,13 +1413,13 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
             ),
           ),
           SizedBox(height: 16),
-
           if (_equiposUsuario.isEmpty)
             Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text('No has agregado equipo aún',
-                    style: TextStyle(color: Colors.grey[600], fontSize: esMovil ? 11 : 12)),
+                    style: TextStyle(
+                        color: Colors.grey[600], fontSize: esMovil ? 11 : 12)),
               ),
             )
           else
@@ -1457,20 +1441,30 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(equipo['name'],
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
                           SizedBox(height: 4),
-                          Text('Cantidad: ${equipo['quantity']}${equipo['notes'].isNotEmpty ? ' • ${equipo['notes']}' : ''}',
-                              style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                          Text(
+                              'Cantidad: ${equipo['quantity']}${equipo['notes'].isNotEmpty ? ' • ${equipo['notes']}' : ''}',
+                              style: TextStyle(
+                                  color: Colors.grey[400], fontSize: 11)),
                           if (equipo['has_requirement'])
-                            Text('✓ Lo tengo', style: TextStyle(color: Colors.green[400], fontSize: 11)),
+                            Text('✓ Lo tengo',
+                                style: TextStyle(
+                                    color: Colors.green[400], fontSize: 11)),
                           if (equipo['is_experienced'])
-                            Text('✓ Experiencia: ${equipo['experience_years']} años',
-                                style: TextStyle(color: Colors.blue[400], fontSize: 11)),
+                            Text(
+                                '✓ Experiencia: ${equipo['experience_years']} años',
+                                style: TextStyle(
+                                    color: Colors.blue[400], fontSize: 11)),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.close, color: Colors.grey[400], size: 18),
+                      icon:
+                          Icon(Icons.close, color: Colors.grey[400], size: 18),
                       onPressed: () => _quitarEquipo(indice),
                     ),
                   ],
@@ -1485,7 +1479,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
   InputDecoration _decoracionCampo(String hint, bool esMovil) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey[600], fontSize: esMovil ? 12 : 13),
+      hintStyle:
+          TextStyle(color: Colors.grey[600], fontSize: esMovil ? 12 : 13),
       fillColor: Color(0xFF0D1117),
       filled: true,
       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1534,7 +1529,9 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
           SizedBox(height: 16),
           Text('Vista Previa del Perfil',
               style: TextStyle(
-                  color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold)),
           SizedBox(height: 8),
           Text(
               'Tu información de perfil es visible para productoras registradas en Conekta.',
@@ -1544,11 +1541,14 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
     );
   }
 
-  Widget _construirElementoMenu(IconData icono, String titulo, bool estaActivo) {
+  Widget _construirElementoMenu(
+      IconData icono, String titulo, bool estaActivo) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: estaActivo ? Color(0xFF1F6FEB).withOpacity(0.15) : Colors.transparent,
+        color: estaActivo
+            ? Color(0xFF1F6FEB).withOpacity(0.15)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         border: estaActivo
             ? Border.all(color: Color(0xFF1F6FEB).withOpacity(0.4), width: 1)
@@ -1576,12 +1576,15 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
         color: estaActivo ? Colors.green[600] : Color(0xFF161B22),
         shape: BoxShape.circle,
         border: Border.all(
-            color: estaActivo ? Colors.green[600]! : Color(0xFF30363D), width: 2),
+            color: estaActivo ? Colors.green[600]! : Color(0xFF30363D),
+            width: 2),
       ),
       child: Center(
         child: Text(paso,
             style: TextStyle(
-                color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold)),
       ),
     );
   }

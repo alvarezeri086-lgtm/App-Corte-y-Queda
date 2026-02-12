@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:http_parser/http_parser.dart';
+import '../utils/error_handler.dart';
 
 class ProfileOrgPage extends StatefulWidget {
   final String userId;
@@ -75,9 +76,6 @@ class _ProfileOrgPageState extends State<ProfileOrgPage> {
         "is_active": true,
       };
 
-      print(' ASOCIANDO USUARIO A ORGANIZACIÓN ');
-      print('Datos: $data');
-
       final response = await http.post(
         Uri.parse('$baseUrl/org-users/'),
         headers: {
@@ -85,9 +83,7 @@ class _ProfileOrgPageState extends State<ProfileOrgPage> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode(data),
-      );
-
-      print('Respuesta asociación: ${response.statusCode} - ${response.body}');
+      ).timeout(Duration(seconds: 15));
 
       return response.statusCode == 200;
     } catch (e) {
@@ -158,11 +154,6 @@ class _ProfileOrgPageState extends State<ProfileOrgPage> {
         "verification_badge": false, 
       };
 
-      print(' ENVIANDO DATOS DE ORGANIZACIÓN');
-      print('URL: $baseUrl/organizations/');
-      print('Datos: $data');
-      print('User ID: $currentUserId');
-
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -179,16 +170,7 @@ class _ProfileOrgPageState extends State<ProfileOrgPage> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode(data),
-      ).timeout(
-        Duration(seconds: 30),
-        onTimeout: () {
-          throw TimeoutException('El servidor tardó demasiado en responder');
-        },
-      );
-
-      print('RESPUESTA DEL SERVIDOR');
-      print('Status: ${response.statusCode}');
-      print('Body: ${response.body}');
+      ).timeout(Duration(seconds: 15));
 
       if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
@@ -197,12 +179,10 @@ class _ProfileOrgPageState extends State<ProfileOrgPage> {
       if (response.statusCode == 201) { 
         try {
           final responseData = jsonDecode(response.body);
-          print('Organización creada: $responseData');
           
           final organizationId = responseData['id'];
           
           if (organizationId != null) {
-            print('ASOCIANDO USUARIO A LA ORGANIZACIÓN...');
             final associationSuccess = await _associateUserToOrganization(
               organizationId.toString(),
               currentUserId,
@@ -248,82 +228,14 @@ class _ProfileOrgPageState extends State<ProfileOrgPage> {
           Navigator.pushReplacementNamed(context, '/events');
         }
       } else {
-        String errorMessage = 'Error al crear organización (Código: ${response.statusCode})';
-        
-        try {
-          final errorData = jsonDecode(response.body);
-          print('Error data: $errorData');
-          
-          if (errorData['detail'] != null) {
-            errorMessage = errorData['detail'].toString();
-          } else if (errorData is Map<String, dynamic>) {
-            List<String> errors = [];
-            errorData.forEach((key, value) {
-              if (value is List) {
-                errors.add('$key: ${value.join(', ')}');
-              } else if (value is String) {
-                errors.add('$key: $value');
-              } else {
-                errors.add('$key: ${value.toString()}');
-              }
-            });
-            if (errors.isNotEmpty) {
-              errorMessage = errors.join('\n');
-            }
-          }
-        } catch (e) {
-          print('Error parsing error response: $e');
-          errorMessage = 'Error ${response.statusCode}: ${response.body}';
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red[600],
-            duration: Duration(seconds: 5),
-          ),
-        );
+        ApiErrorHandler.showErrorSnackBar(context, response.friendlyErrorMessage);
       }
-    } on TimeoutException catch (e) {
-      if (Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-      }
-      print('Timeout: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('El servidor tardó demasiado en responder. Intenta de nuevo.'),
-          backgroundColor: Colors.red[600],
-        ),
-      );
-    } on http.ClientException catch (e) {
-      if (Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-      }
-      print('ClientException: $e');
-      
-      String errorMsg = 'Error de conexión: ${e.message}';
-      if (e.message.contains('Failed to fetch') || e.message.contains('Connection refused')) {
-        errorMsg = 'No se pudo conectar con el servidor. Verifica:\n1. Tu conexión a internet\n2. Que la URL del API sea correcta\n3. Que el servidor esté en funcionamiento';
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMsg),
-          backgroundColor: Colors.red[600],
-          duration: Duration(seconds: 6),
-        ),
-      );
     } catch (e) {
       if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
       print('Error general: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error inesperado: ${e.toString()}'),
-          backgroundColor: Colors.red[600],
-        ),
-      );
+      ApiErrorHandler.showErrorSnackBar(context, ApiErrorHandler.handleNetworkException(e));
     } finally {
       setState(() {
         _isLoading = false;

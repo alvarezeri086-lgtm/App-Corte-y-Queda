@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../auth_provider.dart';
-import '../componentes/bottoom_freelancer.dart';
 
 class FreelancerActivationsScreen extends StatefulWidget {
   const FreelancerActivationsScreen({Key? key}) : super(key: key);
@@ -114,6 +113,60 @@ class _FreelancerActivationsScreenState extends State<FreelancerActivationsScree
     }
   }
 
+  Future<bool> respondToActivation(String activationId, String action, {String? reason}) async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final token = authProvider.accessToken;
+      final baseUrl = dotenv.env['API_BASE_URL'];
+
+      if (token == null || baseUrl == null) {
+        throw Exception('No hay token de autenticación o URL base');
+      }
+
+      final url = Uri.parse('$baseUrl/activations/$activationId/respond');
+
+      final requestBody = <String, dynamic>{
+        'action': action,
+      };
+      
+      if (reason != null && reason.isNotEmpty) {
+        requestBody['reason'] = reason;
+      }
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else if (response.statusCode == 401) {
+        throw Exception('Sesión expirada');
+      } else if (response.statusCode == 404) {
+        throw Exception('Activación no encontrada');
+      } else if (response.statusCode == 422) {
+        final responseBody = json.decode(response.body);
+        final errors = responseBody['detail'] as List?;
+        if (errors != null && errors.isNotEmpty) {
+          throw Exception(errors.first['msg'] ?? 'Error de validación');
+        }
+        throw Exception('Error de validación');
+      } else if (response.statusCode == 400) {
+        final responseBody = json.decode(response.body);
+        throw Exception(responseBody['message'] ?? 'Error al responder');
+      } else {
+        throw Exception('Error ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Map<String, dynamic> parseActivation(dynamic activation) {
     Map<String, dynamic> result = {
       'id': activation['id'] ?? 'N/A',
@@ -166,6 +219,7 @@ class _FreelancerActivationsScreenState extends State<FreelancerActivationsScree
         return const Color(0xFF4CAF50);
       case 'REJECTED':
       case 'RECHAZADA':
+      case 'DECLINED':
         return const Color(0xFFE53935);
       case 'EXPIRED':
       case 'EXPIRADO':
@@ -185,6 +239,7 @@ class _FreelancerActivationsScreenState extends State<FreelancerActivationsScree
         return Icons.check_circle;
       case 'REJECTED':
       case 'RECHAZADA':
+      case 'DECLINED':
         return Icons.cancel;
       case 'EXPIRED':
       case 'EXPIRADO':
@@ -207,6 +262,8 @@ class _FreelancerActivationsScreenState extends State<FreelancerActivationsScree
       case 'REJECTED':
       case 'RECHAZADA':
         return 'Rechazada';
+      case 'DECLINED':
+        return 'Declinada';
       case 'EXPIRED':
       case 'EXPIRADO':
         return 'Expirada';
@@ -289,6 +346,10 @@ class _FreelancerActivationsScreenState extends State<FreelancerActivationsScree
                     const DropdownMenuItem(
                       value: 'REJECTED',
                       child: Text('Rechazadas'),
+                    ),
+                    const DropdownMenuItem(
+                      value: 'DECLINED',
+                      child: Text('Declinadas'),
                     ),
                     const DropdownMenuItem(
                       value: 'EXPIRED',
@@ -441,15 +502,17 @@ class _FreelancerActivationsScreenState extends State<FreelancerActivationsScree
                                   getStatusColor: getStatusColor,
                                   getStatusIcon: getStatusIcon,
                                   getStatusText: getStatusText,
+                                  onStatusChanged: () {
+                                    // Recargar la lista después de cambiar el estado
+                                    fetchActivations(status: selectedStatus);
+                                  },
+                                  respondToActivation: respondToActivation,
                                 );
                               },
                             ),
                           ),
           ),
         ],
-      ),
-      bottomNavigationBar: FreelancerBottomNav(
-        currentRoute: '/freelancer_activations',
       ),
     );
   }
@@ -460,6 +523,8 @@ class ActivationCard extends StatelessWidget {
   final Color Function(String) getStatusColor;
   final IconData Function(String) getStatusIcon;
   final String Function(String) getStatusText;
+  final VoidCallback onStatusChanged;
+  final Future<bool> Function(String, String, {String? reason}) respondToActivation;
 
   const ActivationCard({
     Key? key,
@@ -467,6 +532,8 @@ class ActivationCard extends StatelessWidget {
     required this.getStatusColor,
     required this.getStatusIcon,
     required this.getStatusText,
+    required this.onStatusChanged,
+    required this.respondToActivation,
   }) : super(key: key);
 
   @override
@@ -496,7 +563,11 @@ class ActivationCard extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ActivationDetailScreen(activation: activation),
+            builder: (context) => ActivationDetailScreen(
+              activation: activation,
+              onStatusChanged: onStatusChanged,
+              respondToActivation: respondToActivation,
+            ),
           ),
         );
       },
@@ -839,11 +910,24 @@ class ActivationCard extends StatelessWidget {
   }
 }
 
-class ActivationDetailScreen extends StatelessWidget {
+class ActivationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> activation;
+  final VoidCallback onStatusChanged;
+  final Future<bool> Function(String, String, {String? reason}) respondToActivation;
 
-  const ActivationDetailScreen({Key? key, required this.activation})
-      : super(key: key);
+  const ActivationDetailScreen({
+    Key? key,
+    required this.activation,
+    required this.onStatusChanged,
+    required this.respondToActivation,
+  }) : super(key: key);
+
+  @override
+  State<ActivationDetailScreen> createState() => _ActivationDetailScreenState();
+}
+
+class _ActivationDetailScreenState extends State<ActivationDetailScreen> {
+  bool isUpdating = false;
 
   Color _getStatusColor(String status) {
     switch (status.toUpperCase()) {
@@ -855,6 +939,7 @@ class ActivationDetailScreen extends StatelessWidget {
         return const Color(0xFF4CAF50);
       case 'REJECTED':
       case 'RECHAZADA':
+      case 'DECLINED':
         return const Color(0xFFE53935);
       case 'EXPIRED':
       case 'EXPIRADO':
@@ -876,22 +961,224 @@ class ActivationDetailScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _handleConfirmActivation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A2942),
+        title: const Text(
+          '¿Confirmar activación?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Estás a punto de confirmar esta activación. La empresa será notificada de tu aceptación.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: Colors.white60),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4CAF50),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        isUpdating = true;
+      });
+
+      try {
+        final success = await widget.respondToActivation(
+          widget.activation['id'],
+          'CONFIRM',
+        );
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Activación confirmada exitosamente'),
+              backgroundColor: Color(0xFF4CAF50),
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          // Esperar un momento para que el usuario vea el mensaje
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          // Notificar al padre y regresar
+          widget.onStatusChanged();
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al confirmar: ${e.toString()}'),
+              backgroundColor: const Color(0xFFE53935),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            isUpdating = false;
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _handleRejectActivation() async {
+    String? declineReason;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A2942),
+        title: const Text(
+          '¿Rechazar activación?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Estás a punto de rechazar esta activación. La empresa será notificada de tu rechazo.',
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Razón (opcional):',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              onChanged: (value) => declineReason = value,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Ej: No estoy disponible en esa fecha',
+                hintStyle: TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: const Color(0xFF0F1F3D),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF2A3F5F)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF2A3F5F)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE53935)),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: Colors.white60),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE53935),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Rechazar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        isUpdating = true;
+      });
+
+      try {
+        final success = await widget.respondToActivation(
+          widget.activation['id'],
+          'DECLINE',
+          reason: declineReason,
+        );
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Activación rechazada'),
+              backgroundColor: Color(0xFFE53935),
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          // Esperar un momento para que el usuario vea el mensaje
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          // Notificar al padre y regresar
+          widget.onStatusChanged();
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al rechazar: ${e.toString()}'),
+              backgroundColor: const Color(0xFFE53935),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            isUpdating = false;
+          });
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final status = activation['status'];
+    final status = widget.activation['status'];
     final statusColor = _getStatusColor(status ?? 'UNKNOWN');
-    final eventName = activation['event_name'];
-    final eventId = activation['event_id'];
-    final position = activation['position'];
-    final startDate = activation['start_date'];
-    final endDate = activation['end_date'];
-    final paymentTerms = activation['payment_terms'];
-    final organizationName = activation['organization_name'];
-    final strategy = activation['strategy'];
-    final sentAt = activation['sent_at'];
-    final expireAt = activation['expire_at'];
-    final requiresDocuments = activation['requires_documents'] ?? false;
-    final requiresIntervals = activation['requires_intervals'] ?? false;
+    final eventName = widget.activation['event_name'];
+    final eventId = widget.activation['event_id'];
+    final position = widget.activation['position'];
+    final startDate = widget.activation['start_date'];
+    final endDate = widget.activation['end_date'];
+    final paymentTerms = widget.activation['payment_terms'];
+    final organizationName = widget.activation['organization_name'];
+    final strategy = widget.activation['strategy'];
+    final sentAt = widget.activation['sent_at'];
+    final expireAt = widget.activation['expire_at'];
+    final requiresDocuments = widget.activation['requires_documents'] ?? false;
+    final requiresIntervals = widget.activation['requires_intervals'] ?? false;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1628),
@@ -911,228 +1198,247 @@ class ActivationDetailScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A2942),
-                border: Border(
-                  bottom: BorderSide(
-                    color: const Color(0xFF2A3F5F),
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 6,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          eventName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (organizationName.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              organizationName,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: statusColor,
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A2942),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: const Color(0xFF2A3F5F),
                         width: 1,
                       ),
                     ),
-                    child: Text(
-                      status.toUpperCase(),
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                   ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildInfoSection(
-                    title: 'Información General',
-                    icon: Icons.info_outline,
+                  child: Row(
                     children: [
-                      _buildInfoRow(
-                        icon: Icons.fingerprint,
-                        label: 'ID del Evento',
-                        value: eventId,
-                      ),
-                      if (strategy.isNotEmpty)
-                        _buildInfoRow(
-                          icon: Icons.settings,
-                          label: 'Estrategia',
-                          value: strategy,
+                      Container(
+                        width: 6,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          borderRadius: BorderRadius.circular(3),
                         ),
-                      _buildInfoRow(
-                        icon: Icons.work,
-                        label: 'Posición',
-                        value: position,
                       ),
-                      _buildInfoRow(
-                        icon: Icons.payment,
-                        label: 'Términos de Pago',
-                        value: '$paymentTerms días',
-                        valueColor: const Color(0xFF4CAF50),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  _buildInfoSection(
-                    title: 'Fechas',
-                    icon: Icons.calendar_today,
-                    children: [
-                      _buildInfoRow(
-                        icon: Icons.play_arrow,
-                        label: 'Fecha de Inicio',
-                        value: _formatDateTime(startDate),
-                      ),
-                      _buildInfoRow(
-                        icon: Icons.stop,
-                        label: 'Fecha de Fin',
-                        value: _formatDateTime(endDate),
-                      ),
-                      if (sentAt.isNotEmpty && sentAt != 'No definido')
-                        _buildInfoRow(
-                          icon: Icons.send,
-                          label: 'Enviado el',
-                          value: _formatDateTime(sentAt),
-                        ),
-                      if (expireAt.isNotEmpty && expireAt != 'No definido')
-                        _buildInfoRow(
-                          icon: Icons.timer_off,
-                          label: 'Expira el',
-                          value: _formatDateTime(expireAt),
-                        ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  _buildInfoSection(
-                    title: 'Requisitos',
-                    icon: Icons.checklist,
-                    children: [
-                      _buildInfoRow(
-                        icon: Icons.description,
-                        label: 'Requiere Documentos',
-                        value: requiresDocuments ? 'Sí' : 'No',
-                        valueColor: requiresDocuments
-                            ? const Color(0xFF4CAF50)
-                            : const Color(0xFFE53935),
-                      ),
-                      _buildInfoRow(
-                        icon: Icons.timelapse,
-                        label: 'Requiere Intervalos',
-                        value: requiresIntervals ? 'Sí' : 'No',
-                        valueColor: requiresIntervals
-                            ? const Color(0xFF4CAF50)
-                            : const Color(0xFFE53935),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  if (status == 'PENDING')
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Confirmando activación...'),
-                                  backgroundColor: Color(0xFF4CAF50),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.check),
-                            label: const Text('Confirmar'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4CAF50),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              eventName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
+                            if (organizationName.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  organizationName,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: statusColor,
+                            width: 1,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Rechazando activación...'),
-                                  backgroundColor: Color(0xFFE53935),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoSection(
+                        title: 'Información General',
+                        icon: Icons.info_outline,
+                        children: [
+                          _buildInfoRow(
+                            icon: Icons.fingerprint,
+                            label: 'ID del Evento',
+                            value: eventId,
+                          ),
+                          if (strategy.isNotEmpty)
+                            _buildInfoRow(
+                              icon: Icons.settings,
+                              label: 'Estrategia',
+                              value: strategy,
+                            ),
+                          _buildInfoRow(
+                            icon: Icons.work,
+                            label: 'Posición',
+                            value: position,
+                          ),
+                          _buildInfoRow(
+                            icon: Icons.payment,
+                            label: 'Términos de Pago',
+                            value: '$paymentTerms días',
+                            valueColor: const Color(0xFF4CAF50),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      _buildInfoSection(
+                        title: 'Fechas',
+                        icon: Icons.calendar_today,
+                        children: [
+                          _buildInfoRow(
+                            icon: Icons.play_arrow,
+                            label: 'Fecha de Inicio',
+                            value: _formatDateTime(startDate),
+                          ),
+                          _buildInfoRow(
+                            icon: Icons.stop,
+                            label: 'Fecha de Fin',
+                            value: _formatDateTime(endDate),
+                          ),
+                          if (sentAt.isNotEmpty && sentAt != 'No definido')
+                            _buildInfoRow(
+                              icon: Icons.send,
+                              label: 'Enviado el',
+                              value: _formatDateTime(sentAt),
+                            ),
+                          if (expireAt.isNotEmpty && expireAt != 'No definido')
+                            _buildInfoRow(
+                              icon: Icons.timer_off,
+                              label: 'Expira el',
+                              value: _formatDateTime(expireAt),
+                            ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      _buildInfoSection(
+                        title: 'Requisitos',
+                        icon: Icons.checklist,
+                        children: [
+                          _buildInfoRow(
+                            icon: Icons.description,
+                            label: 'Requiere Documentos',
+                            value: requiresDocuments ? 'Sí' : 'No',
+                            valueColor: requiresDocuments
+                                ? const Color(0xFF4CAF50)
+                                : const Color(0xFFE53935),
+                          ),
+                          _buildInfoRow(
+                            icon: Icons.timelapse,
+                            label: 'Requiere Intervalos',
+                            value: requiresIntervals ? 'Sí' : 'No',
+                            valueColor: requiresIntervals
+                                ? const Color(0xFF4CAF50)
+                                : const Color(0xFFE53935),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      if (status == 'PENDING')
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: isUpdating ? null : _handleConfirmActivation,
+                                icon: isUpdating
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(Icons.check),
+                                label: Text(isUpdating ? 'Procesando...' : 'Confirmar'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4CAF50),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
-                              );
-                            },
-                            icon: const Icon(Icons.close),
-                            label: const Text('Rechazar'),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFFE53935)),
-                              foregroundColor: const Color(0xFFE53935),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: isUpdating ? null : _handleRejectActivation,
+                                icon: isUpdating
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFFE53935),
+                                        ),
+                                      )
+                                    : const Icon(Icons.close),
+                                label: Text(isUpdating ? 'Procesando...' : 'Rechazar'),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Color(0xFFE53935)),
+                                  foregroundColor: const Color(0xFFE53935),
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                ],
+
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isUpdating)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFFFFB800),
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

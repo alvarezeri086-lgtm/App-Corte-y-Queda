@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:async';
+import 'package:intl/intl.dart';
+import '../providers/notification_provider.dart';
+import '../models/notification_model.dart';
 import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../componentes/bottoom_freelancer.dart';
+import '../utils/error_handler.dart';
 
 class FreelancerDashboardPage extends StatefulWidget {
   @override
@@ -15,13 +19,17 @@ class FreelancerDashboardPage extends StatefulWidget {
 
 class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
   bool _isLoading = true;
+  String _errorMessage = '';
   Map<String, dynamic> _dashboardData = {
-    'events_completed': 0,
+    'total_events': 0,
     'acceptance_rate': 0,
     'profile_completion': 0,
-    'upcoming_events_count': 0,
+    'active_events': 0,
+    'finished_events': 0,
   };
   List<Map<String, dynamic>> _upcomingEvents = [];
+  List<Map<String, dynamic>> _myEvents = [];
+  bool _showNotifications = false;
 
   @override
   void initState() {
@@ -30,14 +38,20 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
   }
 
   Future<void> _loadDashboardData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
 
     final baseUrl = dotenv.env['API_BASE_URL'];
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final token = authProvider.accessToken;
 
     if (token == null || baseUrl == null) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Sesión no válida';
+      });
       return;
     }
 
@@ -48,24 +62,32 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException('La conexión ha excedido el tiempo de espera');
+        },
       );
 
       if (dashboardResponse.statusCode == 200) {
         final data = jsonDecode(dashboardResponse.body);
         
+        // Mapear los KPIs correctamente según la estructura real del API
         if (data.containsKey('kpis') && data['kpis'] is Map) {
           final kpis = data['kpis'] as Map<String, dynamic>;
           
           setState(() {
             _dashboardData = {
-              'events_completed': kpis['events_completed'] ?? 0,
-              'acceptance_rate': kpis['acceptance_rate'] ?? 0,
+              'total_events': kpis['total_events'] ?? 0,
+              'acceptance_rate': ((kpis['acceptance_rate'] ?? 0.0) * 100).round(),
               'profile_completion': kpis['profile_completion'] ?? 0,
-              'upcoming_events_count': kpis['upcoming_events_count'] ?? 0,
+              'active_events': kpis['active_events'] ?? 0,
+              'finished_events': kpis['finished_events'] ?? 0,
             };
           });
         }
 
+        // Procesar upcoming_events (puede estar vacío)
         if (data.containsKey('upcoming_events') && data['upcoming_events'] is List) {
           final events = data['upcoming_events'] as List;
           setState(() {
@@ -81,12 +103,46 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
             }).toList();
           });
         }
-      }
 
-      setState(() => _isLoading = false);
+        // Procesar my_events (eventos propios del freelancer)
+        if (data.containsKey('my_events') && data['my_events'] is List) {
+          final events = data['my_events'] as List;
+          setState(() {
+            _myEvents = events.map<Map<String, dynamic>>((event) {
+              return {
+                'id': event['event_id']?.toString() ?? '',
+                'title': event['name']?.toString() ?? 'Sin título',
+                'start_date': event['start_date']?.toString(),
+                'end_date': event['end_date']?.toString(),
+                'location': event['location']?.toString() ?? 'Sin ubicación',
+                'status': event['status']?.toString() ?? 'ACTIVO',
+                'role': event['role']?.toString() ?? '',
+              };
+            }).toList();
+          });
+        }
+
+        setState(() => _isLoading = false);
+      } else if (dashboardResponse.statusCode == 401) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Sesión expirada. Por favor, inicia sesión nuevamente.';
+        });
+        await authProvider.logout();
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        }
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = ApiErrorHandler.handleHttpError(null, statusCode: dashboardResponse.statusCode);
+        });
+      }
     } catch (e) {
-      print('Error loading freelancer dashboard: $e');
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _errorMessage = ApiErrorHandler.handleHttpError(e);
+      });
     }
   }
 
@@ -119,7 +175,9 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
       final storage = FlutterSecureStorage();
       await storage.deleteAll();
       await authProvider.logout();
-      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
     }
   }
 
@@ -245,22 +303,18 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red[900]!.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.red[400]!, width: 1),
-                ),
-                child: Text('ALTA PRIORIDAD',
-                    style: TextStyle(
-                        color: Colors.red[400],
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold)),
-              ),
-            ],
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.red[900]!.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.red[400]!, width: 1),
+            ),
+            child: Text('ALTA PRIORIDAD',
+                style: TextStyle(
+                    color: Colors.red[400],
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold)),
           ),
           SizedBox(height: 12),
           Text('Actividades Urgentes',
@@ -277,57 +331,71 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
   }
 
   Widget _buildMetricCard(String title, dynamic value, String subtitle, Color color) {
-    return Container(
-      padding: EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Color(0xFF30363D), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            value.toString(),
-            style: TextStyle(
-              color: color,
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              height: 1.0,
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Ajustar tamaños según el ancho disponible
+        final isVerySmall = constraints.maxWidth < 140;
+        final fontSize = isVerySmall ? 20.0 : 24.0;
+        final titleFontSize = isVerySmall ? 11.0 : 12.0;
+        final subtitleFontSize = isVerySmall ? 9.0 : 10.0;
+        
+        return Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Color(0xFF161B22),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Color(0xFF30363D), width: 1),
           ),
-          SizedBox(height: 6),
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.grey[300],
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              height: 1.1,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value.toString(),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.bold,
+                    height: 1.0,
+                  ),
+                ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  color: Colors.grey[300],
+                  fontSize: titleFontSize,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: subtitleFontSize,
+                  height: 1.1,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-          SizedBox(height: 3),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: Colors.grey[500],
-              fontSize: 10,
-              height: 1.1,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildEventCard(Map<String, dynamic> event) {
-    final status = event['status']?.toString() ?? 'ACTIVE';
-    final isActive = status == 'ACTIVE';
+    final status = event['status']?.toString() ?? 'ACTIVO';
+    final isActive = status == 'ACTIVO';
     final statusColor = isActive ? Colors.green[400]! : Colors.grey[400]!;
 
     String dayText = '--';
@@ -346,141 +414,337 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
 
     return Container(
       margin: EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 60,
-            padding: EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.blue[900]!.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue[400]!, width: 1),
-            ),
-            child: Column(
-              children: [
-                Text(dayText,
-                    style: TextStyle(
-                        color: Colors.blue[400],
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-                Text(monthText,
-                    style: TextStyle(color: Colors.blue[300], fontSize: 12)),
-              ],
-            ),
-          ),
-          SizedBox(width: 16),
-
-          Expanded(
-            child: Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Color(0xFF161B22),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Color(0xFF30363D), width: 1),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isSmall = constraints.maxWidth < 400;
+          
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // En pantallas pequeñas, fecha arriba
+              if (isSmall) ...[
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[900]!.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue[400]!, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: Text(event['title'],
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: statusColor, width: 1),
-                        ),
-                        child: Text(status,
-                            style: TextStyle(
-                                color: statusColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold)),
-                      ),
+                      Text(dayText,
+                          style: TextStyle(
+                              color: Colors.blue[400],
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold)),
+                      SizedBox(width: 6),
+                      Text(monthText,
+                          style: TextStyle(color: Colors.blue[300], fontSize: 12)),
                     ],
                   ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on_outlined,
-                          color: Colors.grey[400], size: 16),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(event['location'],
-                            style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                ),
+                SizedBox(height: 12),
+              ],
+              
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Fecha a la izquierda solo en pantallas grandes
+                  if (!isSmall) ...[
+                    Container(
+                      width: 60,
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[900]!.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue[400]!, width: 1),
                       ),
-                    ],
+                      child: Column(
+                        children: [
+                          Text(dayText,
+                              style: TextStyle(
+                                  color: Colors.blue[400],
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold)),
+                          Text(monthText,
+                              style: TextStyle(color: Colors.blue[300], fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                  ],
+
+                  Expanded(
+                    child: Container(
+                      padding: EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Color(0xFF161B22),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Color(0xFF30363D), width: 1),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(event['title'],
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                              SizedBox(width: 8),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: statusColor, width: 1),
+                                ),
+                                child: Text(status,
+                                    style: TextStyle(
+                                        color: statusColor,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(Icons.location_on_outlined,
+                                  color: Colors.grey[400], size: 14),
+                              SizedBox(width: 6),
+                              Expanded(
+                                child: Text(event['location'],
+                                    style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                          if (event['role'] != null && event['role'].toString().isNotEmpty) ...[
+                            SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.work_outline,
+                                    color: Colors.grey[400], size: 14),
+                                SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(event['role'],
+                                      style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildVaultItem(String name, bool completed) {
-    return Container(
-      padding: EdgeInsets.all(12),
-      margin: EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Color(0xFF30363D), width: 1),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            completed ? Icons.check_circle : Icons.circle_outlined,
-            color: completed ? Colors.green[400] : Colors.grey[400],
-            size: 20,
+  Widget _buildNotificationBell() {
+    final unreadCount = Provider.of<NotificationProvider>(context).unreadCount;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    return Stack(
+      children: [
+        IconButton(
+          icon: Icon(
+            Icons.notifications_outlined,
+            color: Colors.white,
+            size: isMobile ? 22 : 24,
           ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(name,
-                style: TextStyle(
-                    color: completed ? Colors.white : Colors.grey[400],
-                    fontSize: 14)),
-          ),
-          if (!completed)
-            TextButton(
-              onPressed: () {},
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          onPressed: () {
+            setState(() {
+              _showNotifications = !_showNotifications;
+            });
+          },
+        ),
+        if (unreadCount > 0)
+          Positioned(
+            right: isMobile ? 6 : 8,
+            top: isMobile ? 6 : 8,
+            child: Container(
+              padding: EdgeInsets.all(isMobile ? 2 : 4),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
               ),
-              child: Text('Subir',
-                  style: TextStyle(color: Colors.blue[400], fontSize: 12)),
+              constraints: BoxConstraints(
+                minWidth: isMobile ? 14 : 16,
+                minHeight: isMobile ? 14 : 16,
+              ),
+              child: Text(
+                unreadCount > 9 ? '9+' : '$unreadCount',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isMobile ? 8 : 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
-        ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationsPanel() {
+    if (!_showNotifications) return SizedBox.shrink();
+
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final notificationProvider = Provider.of<NotificationProvider>(context);
+
+    return Positioned(
+      right: isMobile ? 10 : 20,
+      top: isMobile ? 60 : 70,
+      child: Container(
+        width: isMobile ? screenWidth * 0.9 : 350,
+        height: isMobile ? 350 : 400,
+        decoration: BoxDecoration(
+          color: Color(0xFF161B22),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Color(0xFF30363D), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 20,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Color(0xFF30363D), width: 1)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Notificaciones', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  if (notificationProvider.unreadCount > 0)
+                    TextButton(
+                      onPressed: notificationProvider.markAsRead,
+                      child: Text('Marcar leídas', style: TextStyle(color: Colors.blue[400], fontSize: 12)),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: notificationProvider.notifications.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.notifications_none, color: Colors.grey[600], size: 40),
+                          SizedBox(height: 8),
+                          Text('No hay notificaciones', style: TextStyle(color: Colors.grey[500])),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: notificationProvider.notifications.length,
+                      itemBuilder: (context, index) {
+                        return _buildNotificationItem(notificationProvider.notifications[index]);
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildNotificationItem(PushNotification notification) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFF30363D), width: 1)),
+      ),
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          padding: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.blue[900]!.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.notifications, color: Colors.blue[400], size: 20),
+        ),
+        title: Text(
+          notification.title ?? 'Notificación',
+          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 4),
+            Text(
+              notification.body ?? '',
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 4),
+            Text(
+              _formatTimeAgo(notification.timestamp ?? DateTime.now()),
+              style: TextStyle(color: Colors.grey[600], fontSize: 10),
+            ),
+          ],
+        ),
+        onTap: () {
+          if (notification.route != null) {
+            Navigator.pushNamed(context, notification.route!, arguments: notification.parameters);
+          }
+        },
+      ),
+    );
+  }
+
+  String _formatTimeAgo(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+    if (difference.inMinutes < 60) return 'Hace ${difference.inMinutes} min';
+    if (difference.inHours < 24) return 'Hace ${difference.inHours} h';
+    return DateFormat('dd/MM/yyyy').format(time);
   }
 
   Widget _buildHeader(bool isMobile) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Panel Freelancer',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: isMobile ? 22 : 28,
-            fontWeight: FontWeight.bold,
+        Expanded(
+          child: Text(
+            'Panel Freelancer',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: isMobile ? 20 : 28,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        IconButton(
-          icon: Icon(Icons.refresh, color: Colors.white),
-          onPressed: _loadDashboardData,
-          tooltip: 'Actualizar',
+        Row(
+          children: [
+            _buildNotificationBell(),
+            IconButton(
+              icon: Icon(Icons.refresh, color: Colors.white),
+              onPressed: _loadDashboardData,
+              tooltip: 'Actualizar',
+            ),
+          ],
         ),
       ],
     );
@@ -488,29 +752,36 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 900;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 900;
+
+    // Determinar qué eventos mostrar: priorizar upcoming_events, luego my_events
+    final eventsToShow = _upcomingEvents.isNotEmpty ? _upcomingEvents : _myEvents;
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      bottomNavigationBar: isMobile
-          ? FreelancerBottomNav(currentRoute: '/freelancer_dashboard')
-          : null,
       
       body: SafeArea(
         child: _isLoading
             ? Center(child: CircularProgressIndicator(color: Colors.blue[600]))
-            : Row(
+            : _errorMessage.isNotEmpty
+                ? ApiErrorHandler.buildErrorWidget(
+                    message: _errorMessage,
+                    onRetry: _loadDashboardData,
+                  )
+                : Stack(
+                  children: [
+                    Row(
                 children: [
                   if (!isMobile) _buildSidebar(),
-
                   Expanded(
                     child: Padding(
-                      padding: EdgeInsets.all(isMobile ? 16 : 32),
+                      padding: EdgeInsets.all(isMobile ? 12 : 32),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildHeader(isMobile),
-                          SizedBox(height: isMobile ? 16 : 24),
+                          SizedBox(height: isMobile ? 12 : 24),
 
                           Expanded(
                             child: SingleChildScrollView(
@@ -518,46 +789,74 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   _buildUrgentBanner(),
-                                  SizedBox(height: 20),
+                                  SizedBox(height: 16),
                                   
-                                  // Tarjetas de métricas compactas
-                                  GridView.count(
-                                    shrinkWrap: true,
-                                    physics: NeverScrollableScrollPhysics(),
-                                    crossAxisCount: isMobile ? 1 : 3,
-                                    crossAxisSpacing: 12,
-                                    mainAxisSpacing: 12,
-                                    childAspectRatio: isMobile ? 3.5 : 1.6,
-                                    children: [
+                                  LayoutBuilder(builder: (context, constraints) {
+                                    // Determinar número de columnas según el ancho
+                                    int crossAxisCount;
+                                    double childAspectRatio;
+                                    
+                                    if (constraints.maxWidth < 360) {
+                                      // Móvil muy pequeño: 1 columna
+                                      crossAxisCount = 1;
+                                      childAspectRatio = 2.5;
+                                    } else if (constraints.maxWidth < 600) {
+                                      // Móvil normal: 2 columnas
+                                      crossAxisCount = 2;
+                                      childAspectRatio = 1.4;
+                                    } else if (constraints.maxWidth < 900) {
+                                      // Tablet: 3 columnas
+                                      crossAxisCount = 3;
+                                      childAspectRatio = 1.5;
+                                    } else {
+                                      // Desktop: 3 columnas
+                                      crossAxisCount = 3;
+                                      childAspectRatio = 1.8;
+                                    }
+                                    
+                                    final metrics = [
                                       _buildMetricCard(
-                                          'Eventos completados',
-                                          _dashboardData['events_completed'],
-                                          'Total histórico',
+                                          'Total de eventos',
+                                          _dashboardData['total_events'],
+                                          'Activos: ${_dashboardData['active_events']} | Finalizados: ${_dashboardData['finished_events']}',
                                           Colors.green[400]!),
                                       _buildMetricCard(
                                           'Tasa de aceptación',
                                           '${_dashboardData['acceptance_rate']}%',
-                                          'Porcentaje de aceptación',
+                                          'Porcentaje',
                                           Colors.blue[400]!),
                                       _buildMetricCard(
                                           'Perfil completado',
                                           '${_dashboardData['profile_completion']}%',
                                           'Estado del perfil',
                                           Colors.purple[400]!),
-                                    ],
-                                  ),
+                                    ];
+
+                                    return GridView.builder(
+                                      shrinkWrap: true,
+                                      physics: NeverScrollableScrollPhysics(),
+                                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: crossAxisCount,
+                                        childAspectRatio: childAspectRatio,
+                                        crossAxisSpacing: 10,
+                                        mainAxisSpacing: 10,
+                                      ),
+                                      itemCount: metrics.length,
+                                      itemBuilder: (context, index) => metrics[index],
+                                    );
+                                  }),
                                   
-                                  SizedBox(height: 28),
-                                  Text('Próximos eventos',
+                                  SizedBox(height: 24),
+                                  Text('Mis eventos',
                                       style: TextStyle(
                                           color: Colors.white,
-                                          fontSize: 20,
+                                          fontSize: 18,
                                           fontWeight: FontWeight.bold)),
-                                  SizedBox(height: 16),
+                                  SizedBox(height: 12),
 
-                                  if (_upcomingEvents.isEmpty)
+                                  if (eventsToShow.isEmpty)
                                     Container(
-                                      padding: EdgeInsets.all(32),
+                                      padding: EdgeInsets.all(24),
                                       decoration: BoxDecoration(
                                         color: Color(0xFF161B22),
                                         borderRadius: BorderRadius.circular(12),
@@ -569,18 +868,19 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                                           children: [
                                             Icon(Icons.event_available_outlined,
                                                 color: Colors.grey[600],
-                                                size: 48),
-                                            SizedBox(height: 16),
-                                            Text('No tienes eventos próximos',
+                                                size: 40),
+                                            SizedBox(height: 12),
+                                            Text('No tienes eventos confirmados',
                                                 style: TextStyle(
                                                     color: Colors.grey[400],
-                                                    fontSize: 16)),
-                                            SizedBox(height: 8),
+                                                    fontSize: 14),
+                                                textAlign: TextAlign.center),
+                                            SizedBox(height: 6),
                                             Text(
                                                 'Cuando te asignen a eventos, aparecerán aquí',
                                                 style: TextStyle(
                                                     color: Colors.grey[600],
-                                                    fontSize: 14),
+                                                    fontSize: 12),
                                                 textAlign: TextAlign.center),
                                           ],
                                         ),
@@ -588,24 +888,12 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                                     )
                                   else
                                     Column(
-                                      children: _upcomingEvents
+                                      children: eventsToShow
                                           .map((event) => _buildEventCard(event))
                                           .toList(),
                                     ),
 
-                                  SizedBox(height: 28),
-                                  Text('Estado de la bóveda',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold)),
-                                  SizedBox(height: 16),
-
-                                  _buildVaultItem('Seguro de responsabilidad civil', true),
-                                  _buildVaultItem('Permiso de trabajo (MX)', true),
-                                  _buildVaultItem('Certificación de salud', false),
-
-                                  SizedBox(height: 32),
+                                  SizedBox(height: 24),
                                 ],
                               ),
                             ),
@@ -616,6 +904,9 @@ class _FreelancerDashboardPageState extends State<FreelancerDashboardPage> {
                   ),
                 ],
               ),
+              _buildNotificationsPanel(),
+            ],
+          ),
       ),
     );
   }

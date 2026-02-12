@@ -2,17 +2,60 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'utils/guardar_sesion.dart';
+import 'utils/error_handler.dart';
+import 'utils/device_info.dart';
+
+
 
 class AuthProvider with ChangeNotifier {
   bool _isAuthenticated = false;
   String? _accessToken;
   Map<String, dynamic>? _userInfo;
   String? _errorMessage;
+  bool _isLoading = true; 
 
   bool get isAuthenticated => _isAuthenticated;
   String? get accessToken => _accessToken;
   Map<String, dynamic>? get userInfo => _userInfo;
   String? get errorMessage => _errorMessage;
+  bool get isLoading => _isLoading; 
+  
+  AuthProvider() {
+    _loadSavedSession();
+  }
+
+  Future<void> _loadSavedSession() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final hasSession = await StorageHelper.hasSession();
+      
+      if (hasSession) {
+        final savedToken = await StorageHelper.getAccessToken();
+        final savedUserInfo = await StorageHelper.getUserInfo();
+        final savedAuthStatus = await StorageHelper.getAuthStatus();
+
+        if (savedToken != null && savedUserInfo != null && savedAuthStatus) {
+          _accessToken = savedToken;
+          _userInfo = savedUserInfo;
+          _isAuthenticated = true;
+
+          getUserInfo().catchError((error) {
+            print('No se pudo refrescar user info: $error');
+          });
+        }
+      }
+    } catch (e) {
+      print('Error cargando sesión guardada: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
   
   bool get isBasicProfileComplete {
     if (_userInfo == null) return false;
@@ -154,18 +197,46 @@ class AuthProvider with ChangeNotifier {
   Future<bool> login(String email, String password) async {
     final baseUrl = dotenv.env['API_BASE_URL'];
     if (baseUrl == null) {
-      _errorMessage = 'Error: API_BASE_URL no configurada';
-      print(_errorMessage);
+      _errorMessage = 'Configuración no disponible';
       notifyListeners();
       return false;
     }
+    
     final url = Uri.parse('$baseUrl/users/login');
 
     try {
+      String fcmToken = '';
+      try {
+        fcmToken = await FirebaseMessaging.instance.getToken() ?? '';
+      } catch (e) {
+        print('Error obteniendo FCM token: $e');
+      }
+      
+      final deviceInfo = await DeviceInfoHelper.getDeviceInfo();
+
+      final bodyMap = {
+        'email': email,
+        'password': password,
+        'fcm_token': fcmToken,
+        'device_type': deviceInfo['device_type'] ?? '',
+        'device_name': deviceInfo['device_name'] ?? '',
+        'device_os': deviceInfo['device_os'] ?? '',
+        'browser': deviceInfo['browser'] ?? '',
+      };
+
+      final body = bodyMap.entries
+          .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'email=$email&password=$password',
+        body: body,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException('La conexión ha excedido el tiempo de espera');
+        },
       );
 
       if (response.statusCode == 200) {
@@ -176,39 +247,39 @@ class AuthProvider with ChangeNotifier {
             _isAuthenticated = true;
             _errorMessage = null;
 
+            await StorageHelper.saveAccessToken(_accessToken!);
+            await StorageHelper.saveAuthStatus(true);
+
             await getUserInfo();
 
             notifyListeners();
             return true;
           } else {
-            _errorMessage = "Error: No se encontró 'access_token' en la respuesta.";
-            print(_errorMessage);
+            _errorMessage = "Respuesta inválida del servidor";
             _isAuthenticated = false;
             notifyListeners();
             return false;
           }
         } catch (e) {
-          _errorMessage = 'Error al decodificar la respuesta JSON: $e';
-          print(_errorMessage);
+          _errorMessage = 'Error procesando respuesta del servidor';
           _isAuthenticated = false;
           notifyListeners();
           return false;
         }
+      } else if (response.statusCode == 401) {
+        _errorMessage = 'Email o contraseña incorrectos';
+        _isAuthenticated = false;
+        notifyListeners();
+        return false;
       } else {
-        try {
-          final errorData = jsonDecode(response.body);
-          _errorMessage = errorData['message'] ?? 'Error de inicio de sesión: ${response.statusCode}';
-        } catch (e) {
-          _errorMessage = 'Error de inicio de sesión: ${response.statusCode}';
-        }
-        print('Error de login: $_errorMessage');
+        _errorMessage = ApiErrorHandler.handleHttpError(null, statusCode: response.statusCode);
         _isAuthenticated = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
-      _errorMessage = 'Error de conexión: $e';
-      print(_errorMessage);
+      _errorMessage = ApiErrorHandler.handleHttpError(e);
+      print('Error de conexión en login: $e');
       _isAuthenticated = false;
       notifyListeners();
       return false;
@@ -222,7 +293,6 @@ class AuthProvider with ChangeNotifier {
 
     final baseUrl = dotenv.env['API_BASE_URL'];
     if (baseUrl == null) {
-      print('Error: API_BASE_URL no configurada');
       return null;
     }
 
@@ -234,64 +304,66 @@ class AuthProvider with ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_accessToken',
         },
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException('Timeout obteniendo información de usuario');
+        },
       );
 
       if (userResponse.statusCode == 200) {
         final userData = jsonDecode(userResponse.body);
         
         if (userData['user_type'] == 'FREELANCER') {
-          final profileUrl = Uri.parse('$baseUrl/freelancer/profile/get-roles');
+          if (userData['freelancer_profile'] == null) {
+            userData['freelancer_profile'] = {};
+          }
+
           try {
+            final profileUrl = Uri.parse('$baseUrl/freelancer/profile/get-roles');
             final profileResponse = await http.get(
               profileUrl,
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer $_accessToken',
               },
+            ).timeout(
+              const Duration(seconds: 30),
             );
             
             if (profileResponse.statusCode == 200) {
               final profileData = jsonDecode(profileResponse.body);
               
-              if (userData['freelancer_profile'] != null) {
-                userData['freelancer_profile']['job_roles'] = profileData['job_roles'] ?? [];
-                userData['freelancer_profile']['tags'] = profileData['tags'] ?? [];
-                userData['freelancer_profile']['equipment'] = profileData['equipment'] ?? [];
-              } else {
-                userData['freelancer_profile'] = {
-                  'job_roles': profileData['job_roles'] ?? [],
-                  'tags': profileData['tags'] ?? [],
-                  'equipment': profileData['equipment'] ?? [],
-                };
-              }
+              userData['freelancer_profile']['job_roles'] = profileData['job_roles'] ?? [];
+              userData['freelancer_profile']['tags'] = profileData['tags'] ?? [];
+              userData['freelancer_profile']['equipment'] = profileData['equipment'] ?? [];
+            } else if (profileResponse.statusCode == 404) {
+              userData['freelancer_profile']['job_roles'] = [];
+              userData['freelancer_profile']['tags'] = [];
+              userData['freelancer_profile']['equipment'] = [];
             } else {
-              print('Error obteniendo perfil freelancer: ${profileResponse.statusCode}');
-              print('Respuesta: ${profileResponse.body}');
-              
-              if (userData['freelancer_profile'] != null) {
-                userData['freelancer_profile']['job_roles'] = [];
-                userData['freelancer_profile']['tags'] = [];
-                userData['freelancer_profile']['equipment'] = [];
-              }
-            }
-          } catch (e) {
-            print('Error en petición freelancer/profile/get-roles: $e');
-            
-            if (userData['freelancer_profile'] != null) {
               userData['freelancer_profile']['job_roles'] = [];
               userData['freelancer_profile']['tags'] = [];
               userData['freelancer_profile']['equipment'] = [];
             }
+          } catch (e) {
+            print('Error en petición de perfil freelancer: $e');
+            userData['freelancer_profile']['job_roles'] = [];
+            userData['freelancer_profile']['tags'] = [];
+            userData['freelancer_profile']['equipment'] = [];
           }
         }
         
         _userInfo = userData;
         
+        await StorageHelper.saveUserInfo(userData);
+        
         notifyListeners();
         return userData;
+      } else if (userResponse.statusCode == 401) {
+        await logout();
+        return null;
       } else {
-        print('Error al obtener información del usuario: ${userResponse.statusCode}');
-        print('Respuesta: ${userResponse.body}');
         return null;
       }
     } catch (e) {
@@ -302,17 +374,19 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> refreshFreelancerProfile() async {
     if (_accessToken == null || _userInfo == null || _userInfo!['user_type'] != 'FREELANCER') {
-      print('No se puede refrescar perfil freelancer: condiciones no cumplidas');
       return;
     }
 
     final baseUrl = dotenv.env['API_BASE_URL'];
     if (baseUrl == null) {
-      print('Error: API_BASE_URL no configurada');
       return;
     }
 
     try {
+      if (_userInfo!['freelancer_profile'] == null) {
+        _userInfo!['freelancer_profile'] = {};
+      }
+
       final profileUrl = Uri.parse('$baseUrl/freelancer/profile/get-roles');
       final profileResponse = await http.get(
         profileUrl,
@@ -320,28 +394,23 @@ class AuthProvider with ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_accessToken',
         },
+      ).timeout(
+        const Duration(seconds: 30),
       );
       
       if (profileResponse.statusCode == 200) {
         final profileData = jsonDecode(profileResponse.body);
         
-        if (_userInfo?['freelancer_profile'] != null) {
-          _userInfo!['freelancer_profile']['job_roles'] = profileData['job_roles'] ?? [];
-          _userInfo!['freelancer_profile']['tags'] = profileData['tags'] ?? [];
-          _userInfo!['freelancer_profile']['equipment'] = profileData['equipment'] ?? [];
-        } else {
-          _userInfo!['freelancer_profile'] = {
-            'job_roles': profileData['job_roles'] ?? [],
-            'tags': profileData['tags'] ?? [],
-            'equipment': profileData['equipment'] ?? [],
-          };
-        }
-        
-        notifyListeners();
+        _userInfo!['freelancer_profile']['job_roles'] = profileData['job_roles'] ?? [];
+        _userInfo!['freelancer_profile']['tags'] = profileData['tags'] ?? [];
+        _userInfo!['freelancer_profile']['equipment'] = profileData['equipment'] ?? [];
+
+        await StorageHelper.saveUserInfo(_userInfo!);
       } else {
-        print('Error refrescando perfil: ${profileResponse.statusCode}');
-        print('Respuesta: ${profileResponse.body}');
+        // Error silencioso al refrescar perfil
       }
+      
+      notifyListeners();
     } catch (e) {
       print('Error refrescando perfil freelancer: $e');
     }
@@ -352,6 +421,9 @@ class AuthProvider with ChangeNotifier {
     _accessToken = null;
     _userInfo = null;
     _errorMessage = null;
+    
+    await StorageHelper.clearAll();
+    
     notifyListeners();
   }
 

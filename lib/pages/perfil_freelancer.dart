@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../auth_provider.dart';
-import '../componentes/bottoom_freelancer.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -175,13 +174,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.of(context).size.width < 900;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 900;
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
-      bottomNavigationBar: isMobile 
-          ? FreelancerBottomNav(currentRoute: '/profile')
-          : null,
       body: SafeArea(
         child: isLoading
             ? Center(child: CircularProgressIndicator(color: Colors.blue[600]))
@@ -254,20 +251,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _buildCompactHeader(isMobile),
         Expanded(
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(isMobile ? 16 : 32),
+            padding: EdgeInsets.all(isMobile ? 12 : 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(child: _buildProfessionalInfoCard()),
-                    if (!isMobile) SizedBox(width: 24),
-                    if (!isMobile) Expanded(child: _buildProfessionalDetailsCard()),
-                  ],
-                ),
                 if (isMobile) ...[
-                  SizedBox(height: 16),
+                  _buildProfessionalInfoCard(),
+                  SizedBox(height: 12),
                   _buildProfessionalDetailsCard(),
+                ] else ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildProfessionalInfoCard()),
+                      SizedBox(width: 24),
+                      Expanded(child: _buildProfessionalDetailsCard()),
+                    ],
+                  ),
                 ],
               ],
             ),
@@ -278,9 +278,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildCompactHeader(bool isMobile) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isVerySmall = screenWidth < 360;
+    
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 32, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 32, vertical: 12),
       decoration: BoxDecoration(
         color: Color(0xFF161B22),
         border: Border(bottom: BorderSide(color: Color(0xFF30363D), width: 1)),
@@ -289,27 +292,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           profileImageUrl != null && profileImageUrl!.isNotEmpty
               ? CircleAvatar(
-                  radius: 28,
+                  radius: isVerySmall ? 22 : 26,
                   backgroundImage: NetworkImage(profileImageUrl!),
-                  onBackgroundImageError: (exception, stackTrace) {
-                    print('Error loading image: $exception');
-                  },
+                  onBackgroundImageError: (exception, stackTrace) {},
                   child: profileImageUrl!.isEmpty 
                       ? Text(
                           (userData?['full_name'] ?? 'U')[0].toUpperCase(),
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: Colors.white, fontSize: isVerySmall ? 16 : 18, fontWeight: FontWeight.bold),
                         )
                       : null,
                 )
               : CircleAvatar(
-                  radius: 28,
+                  radius: isVerySmall ? 22 : 26,
                   backgroundColor: Colors.grey[800],
                   child: Text(
                     (userData?['full_name'] ?? 'U')[0].toUpperCase(),
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: Colors.white, fontSize: isVerySmall ? 16 : 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-          SizedBox(width: 16),
+          SizedBox(width: isMobile ? 10 : 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,38 +318,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Text(
                   userData?['full_name'] ?? 'Usuario',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isVerySmall ? 14 : 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                SizedBox(height: 4),
-                Row(
-                  children: [
-                    if (userData?['nickname'] != null) ...[
-                      Text('@${userData!['nickname']}', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
-                      SizedBox(width: 8),
-                      Text('•', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                      SizedBox(width: 8),
-                    ],
-                    Flexible(
-                      child: Text(
-                        userData?['email'] ?? '',
-                        style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
+                SizedBox(height: 3),
+                if (!isVerySmall)
+                  Row(
+                    children: [
+                      if (userData?['nickname'] != null) ...[
+                        Text('@${userData!['nickname']}', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                        SizedBox(width: 6),
+                        Text('•', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                        SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          userData?['email'] ?? '',
+                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
               ],
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.logout, color: Colors.red[400], size: 20),
-            onPressed: _logout,
-            tooltip: 'Cerrar sesión',
-          ),
-          IconButton(
-            icon: Icon(Icons.edit_outlined, color: Colors.blue[400], size: 20),
-            onPressed: _editGeneralInfo,
-            tooltip: 'Editar perfil',
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.logout, color: Colors.red[400], size: 18),
+                onPressed: _logout,
+                tooltip: 'Cerrar sesión',
+                padding: EdgeInsets.all(8),
+                constraints: BoxConstraints(),
+              ),
+              SizedBox(width: 4),
+              IconButton(
+                icon: Icon(Icons.edit_outlined, color: Colors.blue[400], size: 18),
+                onPressed: _editGeneralInfo,
+                tooltip: 'Editar',
+                padding: EdgeInsets.all(8),
+                constraints: BoxConstraints(),
+              ),
+            ],
           ),
         ],
       ),
@@ -357,7 +374,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfessionalInfoCard() {
     return Container(
-      padding: EdgeInsets.all(24),
+      padding: EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Color(0xFF161B22),
         borderRadius: BorderRadius.circular(12),
@@ -369,85 +386,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Información profesional', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Información profesional', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               IconButton(
-                icon: Icon(Icons.edit_outlined, color: Colors.blue[400], size: 18),
+                icon: Icon(Icons.edit_outlined, color: Colors.blue[400], size: 16),
                 onPressed: _editGeneralInfo,
                 padding: EdgeInsets.zero,
                 constraints: BoxConstraints(),
               ),
             ],
           ),
-          SizedBox(height: 24),
+          SizedBox(height: 18),
           
           if (freelancerProfile?['bio'] != null) ...[
-            _buildInfoLabel('BIOGRAFÍA PROFESIONAL'),
-            SizedBox(height: 8),
+            _buildInfoLabel('BIOGRAFÍA'),
+            SizedBox(height: 6),
             Text(
               freelancerProfile!['bio'],
-              style: TextStyle(color: Colors.grey[300], fontSize: 14, height: 1.5),
+              style: TextStyle(color: Colors.grey[300], fontSize: 13, height: 1.4),
             ),
-            SizedBox(height: 24),
+            SizedBox(height: 18),
           ],
           
-          Row(
-            children: [
-              Expanded(
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isSmall = constraints.maxWidth < 400;
+              
+              if (isSmall) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildInfoLabel('EXPERIENCIA'),
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.work_outline, color: Colors.green[400], size: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          '${freelancerProfile?['years_experience'] ?? 0} años',
-                          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (freelancerProfile?['rfc'] != null)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildInfoLabel('RFC'),
-                      SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.verified_outlined, color: Colors.blue[400], size: 18),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              freelancerProfile!['rfc'],
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
+                    _buildExperienceInfo(),
+                    if (freelancerProfile?['rfc'] != null) ...[
+                      SizedBox(height: 16),
+                      _buildRFCInfo(),
                     ],
-                  ),
-                ),
-            ],
+                  ],
+                );
+              }
+              
+              return Row(
+                children: [
+                  Expanded(child: _buildExperienceInfo()),
+                  if (freelancerProfile?['rfc'] != null) ...[
+                    SizedBox(width: 12),
+                    Expanded(child: _buildRFCInfo()),
+                  ],
+                ],
+              );
+            },
           ),
           
           if (freelancerProfile?['location'] != null) ...[
-            SizedBox(height: 24),
+            SizedBox(height: 18),
             _buildInfoLabel('UBICACIÓN'),
-            SizedBox(height: 8),
+            SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.location_on_outlined, color: Colors.purple[400], size: 18),
-                SizedBox(width: 8),
-                Text(
-                  freelancerProfile!['location'],
-                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                Icon(Icons.location_on_outlined, color: Colors.purple[400], size: 16),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    freelancerProfile!['location'],
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -457,9 +459,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildExperienceInfo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildInfoLabel('EXPERIENCIA'),
+        SizedBox(height: 6),
+        Row(
+          children: [
+            Icon(Icons.work_outline, color: Colors.green[400], size: 16),
+            SizedBox(width: 6),
+            Text(
+              '${freelancerProfile?['years_experience'] ?? 0} años',
+              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRFCInfo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildInfoLabel('RFC'),
+        SizedBox(height: 6),
+        Row(
+          children: [
+            Icon(Icons.verified_outlined, color: Colors.blue[400], size: 16),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                freelancerProfile!['rfc'],
+                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildProfessionalDetailsCard() {
     return Container(
-      padding: EdgeInsets.all(24),
+      padding: EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Color(0xFF161B22),
         borderRadius: BorderRadius.circular(12),
@@ -471,56 +516,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Detalles profesionales', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Detalles profesionales', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               IconButton(
-                icon: Icon(Icons.edit_outlined, color: Colors.blue[400], size: 18),
+                icon: Icon(Icons.edit_outlined, color: Colors.blue[400], size: 16),
                 onPressed: _editProfessionalDetails,
                 padding: EdgeInsets.zero,
                 constraints: BoxConstraints(),
               ),
             ],
           ),
-          SizedBox(height: 24),
+          SizedBox(height: 18),
           
           if (jobRolesData != null && jobRolesData!.isNotEmpty) ...[
             Row(
               children: [
-                Icon(Icons.work_history_outlined, color: Colors.grey[500], size: 16),
-                SizedBox(width: 8),
+                Icon(Icons.work_history_outlined, color: Colors.grey[500], size: 14),
+                SizedBox(width: 6),
                 _buildInfoLabel('ROLES'),
               ],
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 10),
             ...jobRolesData!.map((role) => _buildRoleChip(role)),
-            SizedBox(height: 24),
+            SizedBox(height: 18),
           ],
           
           if (tagsData != null && tagsData!.isNotEmpty) ...[
             Row(
               children: [
-                Icon(Icons.label_outline, color: Colors.grey[500], size: 16),
-                SizedBox(width: 8),
+                Icon(Icons.label_outline, color: Colors.grey[500], size: 14),
+                SizedBox(width: 6),
                 _buildInfoLabel('HABILIDADES'),
               ],
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 10),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 6,
+              runSpacing: 6,
               children: tagsData!.map<Widget>((tag) => _buildTagChip(tag)).toList(),
             ),
-            SizedBox(height: 24),
+            SizedBox(height: 18),
           ],
           
           if (equipmentData != null && equipmentData!.isNotEmpty) ...[
             Row(
               children: [
-                Icon(Icons.camera_alt_outlined, color: Colors.grey[500], size: 16),
-                SizedBox(width: 8),
+                Icon(Icons.camera_alt_outlined, color: Colors.grey[500], size: 14),
+                SizedBox(width: 6),
                 _buildInfoLabel('EQUIPO'),
               ],
             ),
-            SizedBox(height: 12),
+            SizedBox(height: 10),
             ...equipmentData!.map((item) => _buildEquipmentItem(item)),
           ],
         ],
@@ -533,7 +578,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       text,
       style: TextStyle(
         color: Colors.grey[500],
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.5,
       ),
@@ -544,7 +589,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       width: double.infinity,
       margin: EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.all(12),
+      padding: EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Color(0xFF0D1117),
         borderRadius: BorderRadius.circular(8),
@@ -555,19 +600,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Expanded(
             child: Text(
               role['name'] ?? 'Rol',
-              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ),
           if (role['years'] != null || role['level'] != null)
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: Colors.blue[900]!.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '${role['years'] ?? 0}a • Nv.${role['level'] ?? 0}',
-                style: TextStyle(color: Colors.blue[300], fontSize: 12, fontWeight: FontWeight.w500),
+                style: TextStyle(color: Colors.blue[300], fontSize: 11, fontWeight: FontWeight.w500),
               ),
             ),
         ],
@@ -577,7 +622,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildTagChip(dynamic tag) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: Color(0xFF0D1117),
         borderRadius: BorderRadius.circular(16),
@@ -585,7 +630,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Text(
         tag['name'] ?? tag.toString(),
-        style: TextStyle(color: Colors.grey[300], fontSize: 13),
+        style: TextStyle(color: Colors.grey[300], fontSize: 12),
       ),
     );
   }
@@ -594,7 +639,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       width: double.infinity,
       margin: EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.all(12),
+      padding: EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Color(0xFF0D1117),
         borderRadius: BorderRadius.circular(8),
@@ -608,14 +653,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Text(
                   item['name'] ?? 'Equipo',
-                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 if (item['notes'] != null && item['notes'].toString().isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.only(top: 3),
                     child: Text(
                       '"${item['notes']}"',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12, fontStyle: FontStyle.italic),
+                      style: TextStyle(color: Colors.grey[500], fontSize: 11, fontStyle: FontStyle.italic),
                     ),
                   ),
               ],
@@ -623,14 +668,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           if (item['quantity'] != null && item['quantity'] > 0)
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: Colors.green[900]!.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 'x${item['quantity']}',
-                style: TextStyle(color: Colors.green[300], fontSize: 12, fontWeight: FontWeight.w600),
+                style: TextStyle(color: Colors.green[300], fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ),
         ],

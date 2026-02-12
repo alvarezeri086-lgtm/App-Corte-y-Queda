@@ -192,7 +192,7 @@ class _EditEventPageState extends State<EditEventPage> {
         "status": _selectedStatus,
       };
 
-      print('=== ACTUALIZANDO EVENTO ===');
+      print('=== ACTUALIZANDO LLAMADO ===');
       print('Datos: $data');
 
       final response = await http.patch(
@@ -210,7 +210,7 @@ class _EditEventPageState extends State<EditEventPage> {
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('¡Evento actualizado exitosamente!'),
+            content: Text('¡Llamado actualizado exitosamente!'),
             backgroundColor: Colors.green[600],
           ),
         );
@@ -221,7 +221,7 @@ class _EditEventPageState extends State<EditEventPage> {
           Navigator.pop(context, true); // Devolver true para indicar que se actualizó
         }
       } else {
-        String errorMessage = 'Error al actualizar evento: ${response.statusCode}';
+        String errorMessage = 'Error al actualizar llamado: ${response.statusCode}';
         try {
           final errorData = jsonDecode(response.body);
           if (errorData['detail'] != null) {
@@ -335,7 +335,7 @@ class _EditEventPageState extends State<EditEventPage> {
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Editar Evento', style: TextStyle(color: Colors.white)),
+        title: Text('Editar Llamado', style: TextStyle(color: Colors.white)),
         elevation: 0,
       ),
       body: _isLoading
@@ -365,7 +365,7 @@ class _EditEventPageState extends State<EditEventPage> {
                               controller: _titleController,
                               style: TextStyle(color: Colors.white, fontSize: 14),
                               decoration: InputDecoration(
-                                hintText: 'Evento cinematográfico',
+                                hintText: 'Llamado cinematográfico',
                                 hintStyle: TextStyle(color: Colors.grey[600]),
                                 fillColor: Color(0xFF0D1117),
                                 filled: true,
@@ -431,7 +431,7 @@ class _EditEventPageState extends State<EditEventPage> {
                               maxLines: 4,
                               style: TextStyle(color: Colors.white, fontSize: 14),
                               decoration: InputDecoration(
-                                hintText: 'Descripción del evento...',
+                                hintText: 'Descripción del llamado...',
                                 hintStyle: TextStyle(color: Colors.grey[600]),
                                 fillColor: Color(0xFF0D1117),
                                 filled: true,

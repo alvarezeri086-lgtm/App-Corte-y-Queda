@@ -6,16 +6,19 @@ import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'package:intl/intl.dart';
 import 'create_posicion_page.dart';
-class EventDetailsPage extends StatefulWidget {
-  final String eventId;
+import '../utils/error_handler.dart';
 
-  EventDetailsPage({required this.eventId});
+class EventDetailsPage extends StatefulWidget {
+  final String? eventId;
+
+  EventDetailsPage({this.eventId});
 
   @override
   _EventDetailsPageState createState() => _EventDetailsPageState();
 }
 
 class _EventDetailsPageState extends State<EventDetailsPage> {
+  String? _eventId;
   Map<String, dynamic>? _eventData;
   List<Map<String, dynamic>> _positions = [];
   Map<String, Map<String, dynamic>> _positionDetails = {};
@@ -26,11 +29,42 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _loadEventDetails();
-    _loadPositions();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    if (_eventId == null) {
+      final routeArgs = ModalRoute.of(context)?.settings.arguments;
+      
+      if (routeArgs != null) {
+        _eventId = routeArgs.toString();
+      } else if (widget.eventId != null) {
+        _eventId = widget.eventId;
+      }
+      
+      if (_eventId != null && _eventId!.isNotEmpty) {
+        _loadEventDetails();
+        _loadPositions();
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'No se proporcionó un ID de evento válido';
+        });
+      }
+    }
   }
 
   Future<void> _loadEventDetails() async {
+    if (_eventId == null || _eventId!.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'ID de evento no válido';
+      });
+      return;
+    }
+
     final baseUrl = dotenv.env['API_BASE_URL'];
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final token = authProvider.accessToken;
@@ -45,30 +79,35 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
 
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/events/${widget.eventId}'),
+        Uri.parse('$baseUrl/events/$_eventId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
+      if (response.isSuccess) {
         setState(() {
           _eventData = jsonDecode(response.body);
         });
       } else {
         setState(() {
-          _errorMessage = 'Error al cargar detalles del evento';
+          _errorMessage = response.friendlyErrorMessage;
         });
       }
     } catch (e) {
+      print('Excepción al cargar evento: $e');
       setState(() {
-        _errorMessage = 'Error de conexión';
+        _errorMessage = ApiErrorHandler.handleNetworkException(e);
       });
     }
   }
 
   Future<void> _loadPositions() async {
+    if (_eventId == null || _eventId!.isEmpty) {
+      return;
+    }
+
     final baseUrl = dotenv.env['API_BASE_URL'];
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final token = authProvider.accessToken;
@@ -86,16 +125,16 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     });
 
     try {
-      print('Cargando lista de posiciones para el evento: ${widget.eventId}');
+      // UNA SOLA LLAMADA para obtener todas las posiciones del evento
       final listResponse = await http.get(
-        Uri.parse('$baseUrl/positions/?event_id=${widget.eventId}'),
+        Uri.parse('$baseUrl/positions/?event_id=$_eventId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (listResponse.statusCode == 200) {
+      if (listResponse.isSuccess) {
         final data = jsonDecode(listResponse.body);
         List<dynamic> positionsList = [];
         
@@ -113,10 +152,17 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
           }
         }
 
-        List<Map<String, dynamic>> basicPositions = [];
+        // Procesar todas las posiciones directamente desde la respuesta
+        // SIN hacer llamadas adicionales individuales
+        List<Map<String, dynamic>> processedPositions = [];
+        Map<String, Map<String, dynamic>> details = {};
+        
         for (var position in positionsList) {
-          basicPositions.add({
-            'id': position['id']?.toString() ?? '',
+          final positionId = position['id']?.toString() ?? '';
+          
+          // Guardar datos básicos para la lista
+          processedPositions.add({
+            'id': positionId,
             'role_name': position['role_name']?.toString() ?? 'Sin nombre',
             'quantity_required': position['quantity_required'] ?? 1,
             'pay_rate': position['pay_rate']?.toDouble() ?? 0.0,
@@ -125,12 +171,26 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
             'fill_stage': position['fill_stage']?.toString() ?? 'LIST_READY',
             'organization_id': position['organization_id']?.toString(),
           });
-
-          await _loadPositionDetails(position['id']?.toString() ?? '');
+          
+          // Guardar detalles completos (candidatos, freelancer confirmado, etc.)
+          details[positionId] = {
+            'id': positionId,
+            'event_id': position['event_id']?.toString() ?? '',
+            'organization_id': position['organization_id']?.toString() ?? '',
+            'role_name': position['role_name']?.toString() ?? 'Sin nombre',
+            'quantity_required': position['quantity_required'] ?? 1,
+            'pay_rate': position['pay_rate']?.toDouble() ?? 0.0,
+            'currency': position['currency']?.toString() ?? 'USD',
+            'visibility': position['visibility']?.toString() ?? 'PRIVATE',
+            'fill_stage': position['fill_stage']?.toString() ?? 'LIST_READY',
+            'activation_candidates': position['activation_candidates'] ?? [],
+            'confirmed_freelancer': position['confirmed_freelancer'] ?? {},
+          };
         }
 
         setState(() {
-          _positions = basicPositions;
+          _positions = processedPositions;
+          _positionDetails = details;
           _isLoading = false;
           _isLoadingPositions = false;
         });
@@ -141,51 +201,11 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
         });
       }
     } catch (e) {
+      print('Error cargando posiciones: $e');
       setState(() {
         _isLoading = false;
         _isLoadingPositions = false;
       });
-    }
-  }
-
-  Future<void> _loadPositionDetails(String positionId) async {
-    if (positionId.isEmpty) return;
-
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return;
-
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/positions/$positionId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final positionData = jsonDecode(response.body);
-        setState(() {
-          _positionDetails[positionId] = {
-            'id': positionData['id']?.toString() ?? '',
-            'event_id': positionData['event_id']?.toString() ?? '',
-            'organization_id': positionData['organization_id']?.toString() ?? '',
-            'role_name': positionData['role_name']?.toString() ?? 'Sin nombre',
-            'quantity_required': positionData['quantity_required'] ?? 1,
-            'pay_rate': positionData['pay_rate']?.toDouble() ?? 0.0,
-            'currency': positionData['currency']?.toString() ?? 'USD',
-            'visibility': positionData['visibility']?.toString() ?? 'PRIVATE',
-            'fill_stage': positionData['fill_stage']?.toString() ?? 'LIST_READY',
-            'activation_candidates': positionData['activation_candidates'] ?? [],
-            'confirmed_freelancer': positionData['confirmed_freelancer'] ?? {},
-          };
-        });
-      }
-    } catch (e) {
-      print('Error cargando detalles de posición $positionId: $e');
     }
   }
 
@@ -536,104 +556,89 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     }
   }
 
-  void _showPositionDetails(String positionId) async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return;
-
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/positions/$positionId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final positionData = jsonDecode(response.body);
-        
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: Color(0xFF161B22),
-            title: Text(
-              positionData['role_name']?.toString() ?? 'Detalles de Posición',
-              style: TextStyle(color: Colors.white),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildDetailDialogRow('ID:', positionData['id']?.toString() ?? ''),
-                  _buildDetailDialogRow('ID del Evento:', positionData['event_id']?.toString() ?? ''),
-                  _buildDetailDialogRow('Nombre del Rol:', positionData['role_name']?.toString() ?? ''),
-                  _buildDetailDialogRow('Posiciones requeridas:', '${positionData['quantity_required']}'),
-                  _buildDetailDialogRow('Tarifa:', '${positionData['pay_rate']} ${positionData['currency']}'),
-                  _buildDetailDialogRow('Visibilidad:', positionData['visibility']?.toString() ?? ''),
-                  _buildDetailDialogRow('Estado:', _getFillStageText(positionData['fill_stage']?.toString() ?? '')),
-                  
-                  if (positionData['activation_candidates'] is List && 
-                      positionData['activation_candidates'].isNotEmpty) ...[
-                    SizedBox(height: 16),
-                    Text(
-                      'Candidatos:',
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    ...(positionData['activation_candidates'] as List).map((candidate) {
-                      return Padding(
-                        padding: EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          '• ${candidate.toString()}',
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      );
-                    }).toList(),
-                  ],
-                  if (positionData['confirmed_freelancer'] != null && 
-                      positionData['confirmed_freelancer'].isNotEmpty) ...[
-                    SizedBox(height: 16),
-                    Text(
-                      'Freelancer Confirmado:',
-                      style: TextStyle(
-                        color: Colors.green[400],
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    _buildDetailDialogRow('Nombre:', positionData['confirmed_freelancer']['full_name']?.toString() ?? ''),
-                    if (positionData['confirmed_freelancer']['photo_url'] != null)
-                      _buildDetailDialogRow('Foto URL:', positionData['confirmed_freelancer']['photo_url']?.toString() ?? ''),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Cerrar', style: TextStyle(color: Colors.blue[400])),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
+  void _showPositionDetails(String positionId) {
+    final positionData = _positionDetails[positionId];
+    
+    if (positionData == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al cargar detalles: $e'),
+          content: Text('No se encontraron detalles de la posición'),
           backgroundColor: Colors.red[600],
         ),
       );
+      return;
     }
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF161B22),
+        title: Text(
+          positionData['role_name']?.toString() ?? 'Detalles de Posición',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailDialogRow('ID:', positionData['id']?.toString() ?? ''),
+              _buildDetailDialogRow('ID del Evento:', positionData['event_id']?.toString() ?? ''),
+              _buildDetailDialogRow('Nombre del Rol:', positionData['role_name']?.toString() ?? ''),
+              _buildDetailDialogRow('Posiciones requeridas:', '${positionData['quantity_required']}'),
+              _buildDetailDialogRow('Tarifa:', '${positionData['pay_rate']} ${positionData['currency']}'),
+              _buildDetailDialogRow('Visibilidad:', positionData['visibility']?.toString() ?? ''),
+              _buildDetailDialogRow('Estado:', _getFillStageText(positionData['fill_stage']?.toString() ?? '')),
+              
+              if (positionData['activation_candidates'] is List && 
+                  positionData['activation_candidates'].isNotEmpty) ...[
+                SizedBox(height: 16),
+                Text(
+                  'Candidatos:',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                ...(positionData['activation_candidates'] as List).map((candidate) {
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '• ${candidate.toString()}',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  );
+                }).toList(),
+              ],
+              if (positionData['confirmed_freelancer'] != null && 
+                  positionData['confirmed_freelancer'].isNotEmpty) ...[
+                SizedBox(height: 16),
+                Text(
+                  'Freelancer Confirmado:',
+                  style: TextStyle(
+                    color: Colors.green[400],
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                _buildDetailDialogRow('Nombre:', positionData['confirmed_freelancer']['full_name']?.toString() ?? ''),
+                if (positionData['confirmed_freelancer']['photo_url'] != null)
+                  _buildDetailDialogRow('Foto URL:', positionData['confirmed_freelancer']['photo_url']?.toString() ?? ''),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cerrar', style: TextStyle(color: Colors.blue[400])),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDetailDialogRow(String label, String value) {
@@ -709,9 +714,9 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
         headers: {
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200 || response.statusCode == 204) {
+      if (response.isSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Posición eliminada exitosamente'),
@@ -725,7 +730,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al eliminar posición: ${response.statusCode}'),
+            content: Text(response.friendlyErrorMessage),
             backgroundColor: Colors.red[600],
           ),
         );
@@ -733,7 +738,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error de conexión: $e'),
+          content: Text(ApiErrorHandler.handleNetworkException(e)),
           backgroundColor: Colors.red[600],
         ),
       );
@@ -753,20 +758,20 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Detalles del Evento',
+          'Detalles del Llamado',
           style: TextStyle(color: Colors.white),
         ),
         actions: [
           IconButton(
             icon: Icon(Icons.edit, color: Colors.white),
-            onPressed: () {
+            onPressed: _eventId != null ? () {
               Navigator.pushNamed(
                 context,
                 '/edit_event',
-                arguments: widget.eventId,
+                arguments: _eventId,
               ).then((_) => _refreshData());
-            },
-            tooltip: 'Editar evento',
+            } : null,
+            tooltip: 'Editar llamado',
           ),
           IconButton(
             icon: Icon(Icons.refresh, color: Colors.white),
@@ -776,13 +781,13 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
         ],
         elevation: 0,
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: _eventId != null ? FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => CreatePositionPage(
-                eventId: widget.eventId,
+                eventId: _eventId!,
                 eventTitle: _eventData?['title'] ?? 'Evento',
               ),
             ),
@@ -794,29 +799,16 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
         },
         backgroundColor: Colors.blue[600],
         child: Icon(Icons.add, color: Colors.white),
-      ),
+      ) : null,
       body: _isLoading
           ? Center(
               child: CircularProgressIndicator(color: Colors.blue[600]),
             )
           : _errorMessage.isNotEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline,
-                          color: Colors.red[400], size: 48),
-                      SizedBox(height: 16),
-                      Text(
-                        _errorMessage,
-                        style: TextStyle(color: Colors.grey[400]),
-                      ),
-                      SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _refreshData,
-                        child: Text('Reintentar'),
-                      ),
-                    ],
+                  child: ApiErrorHandler.buildErrorWidget(
+                    message: _errorMessage,
+                    onRetry: _refreshData,
                   ),
                 )
               : RefreshIndicator(
@@ -930,7 +922,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                                   ),
                                   Divider(color: Color(0xFF30363D)),
                                   _buildDetailRow(
-                                    'Términos de Pago',
+                                    'Dias de pago',
                                     _eventData?['payment_terms_days']?.toString() ??
                                         'No especificado',
                                     icon: Icons.payment_outlined,
@@ -940,7 +932,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                             ),
                             SizedBox(height: 24),
 
-                            // Posiciones del evento
+                            // Activaciones del llamado
                             Container(
                               padding: EdgeInsets.all(isMobile ? 16 : 24),
                               decoration: BoxDecoration(
@@ -956,7 +948,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
-                                        'POSICIONES DEL EVENTO',
+                                        'ACTIVACIONES DEL LLAMADO',
                                         style: TextStyle(
                                           color: Colors.grey[400],
                                           fontSize: 12,
@@ -993,7 +985,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                                           ),
                                           SizedBox(height: 16),
                                           Text(
-                                            'No hay posiciones creadas',
+                                            'No hay activaciones creadas',
                                             style: TextStyle(
                                               color: Colors.grey[400],
                                               fontSize: 14,
@@ -1001,7 +993,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                                           ),
                                           SizedBox(height: 8),
                                           Text(
-                                            'Presiona el botón + para crear una posición',
+                                            'Presiona el botón + para crear una activación',
                                             style: TextStyle(
                                               color: Colors.grey[600],
                                               fontSize: 12,
@@ -1093,7 +1085,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                             ),
                             SizedBox(height: 32),
 
-                            if (isMobile)
+                            if (isMobile && _eventId != null)
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
@@ -1101,7 +1093,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                                     Navigator.pushNamed(
                                       context,
                                       '/edit_event',
-                                      arguments: widget.eventId,
+                                      arguments: _eventId,
                                     ).then((_) => _refreshData());
                                   },
                                   style: ElevatedButton.styleFrom(
@@ -1113,7 +1105,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                                   ),
                                   icon: Icon(Icons.edit, color: Colors.white),
                                   label: Text(
-                                    'Editar Evento',
+                                    'Editar Llamado',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,

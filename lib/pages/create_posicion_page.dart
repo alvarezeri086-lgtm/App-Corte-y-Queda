@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'package:intl/intl.dart';
+import '../utils/error_handler.dart';
 
 class CreatePositionPage extends StatefulWidget {
   final String eventId;
@@ -26,7 +27,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
   List<String> _selectedJobRoleNames = [];
   int _numberOfPositions = 1;
   double _payRate = 0.0;
-  String _currency = 'USD';
+  String _currency = 'MXN';
   List<String> _selectedTagIds = [];
   List<String> _selectedTagNames = [];
   List<Map<String, dynamic>> _selectedEquipment = [];
@@ -64,7 +65,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
       }
     } catch (e) {
       setState(() {
-        _errorLoadingData = 'Error al cargar datos: $e';
+        _errorLoadingData = ApiErrorHandler.handleNetworkException(e);
       });
     } finally {
       setState(() {
@@ -87,9 +88,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
+      if (response.isSuccess) {
         final data = jsonDecode(response.body);
         List<dynamic> loadedRoles = [];
         
@@ -130,9 +131,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
+      if (response.isSuccess) {
         final data = jsonDecode(response.body);
         List<dynamic> loadedTags = [];
         
@@ -173,9 +174,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
+      if (response.isSuccess) {
         final data = jsonDecode(response.body);
         List<dynamic> loadedEquipment = [];
         
@@ -218,9 +219,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({'name': name}),
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.isSuccess) {
         final newRole = jsonDecode(response.body);
         return {
           'id': newRole['id'].toString(),
@@ -248,9 +249,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({'name': name}),
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.isSuccess) {
         final newTag = jsonDecode(response.body);
         return {
           'id': newTag['id'].toString(),
@@ -278,9 +279,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({'name': name}),
-      );
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.isSuccess) {
         final newEquipment = jsonDecode(response.body);
         return {
           'id': newEquipment['id'].toString(),
@@ -293,47 +294,484 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
     return null;
   }
 
-  void _addSkill() async {
-    final skillName = _customSkillController.text.trim();
-    if (skillName.isEmpty) return;
-
-    final existingTag = _tags.firstWhere(
-      (tag) => tag['name'].toLowerCase() == skillName.toLowerCase(),
-      orElse: () => {},
-    );
-
-    if (existingTag.isNotEmpty) {
-      
-      if (!_selectedTagIds.contains(existingTag['id'])) {
-        setState(() {
-          _selectedTagIds.add(existingTag['id']);
-          _selectedTagNames.add(existingTag['name']);
-        });
-      }
-    } else {
-    
-      setState(() {
-        _isLoading = true;
-      });
-
-      final newTag = await _createTag(skillName);
-      
-      if (newTag != null) {
-        setState(() {
-          _tags.add(newTag);
-          _selectedTagIds.add(newTag['id']);
-          _selectedTagNames.add(newTag['name']);
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al crear la habilidad')),
+  void _showRoleSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF161B22),
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Seleccionar Roles',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: Colors.grey[400]),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '${_selectedJobRoleIds.length} seleccionados',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 14,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Search bar
+                  TextField(
+                    style: TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar roles...',
+                      hintStyle: TextStyle(color: Colors.grey[600]),
+                      prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+                      fillColor: Color(0xFF0D1117),
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      // Implement search if needed
+                    },
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Roles list
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _jobRoles.length,
+                      itemBuilder: (context, index) {
+                        final role = _jobRoles[index];
+                        final isSelected = _selectedJobRoleIds.contains(role['id']);
+                        
+                        return CheckboxListTile(
+                          title: Text(
+                            role['name'],
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          subtitle: role['description'] != null
+                              ? Text(
+                                  role['description'],
+                                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                              : null,
+                          value: isSelected,
+                          activeColor: Colors.purple[600],
+                          checkColor: Colors.white,
+                          onChanged: (value) {
+                            setModalState(() {
+                              if (value == true) {
+                                if (!_selectedJobRoleIds.contains(role['id'])) {
+                                  _selectedJobRoleIds.add(role['id']);
+                                  _selectedJobRoleNames.add(role['name']);
+                                }
+                              } else {
+                                _selectedJobRoleIds.remove(role['id']);
+                                _selectedJobRoleNames.remove(role['name']);
+                              }
+                            });
+                            setState(() {}); // Update parent widget
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  
+                  // Done button
+                  SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple[600],
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Confirmar (${_selectedJobRoleIds.length})',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
-      }
-    }
+      },
+    );
+  }
 
-    _customSkillController.clear();
+  void _showSkillSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF161B22),
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Seleccionar Habilidades',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: Colors.grey[400]),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '${_selectedTagIds.length} seleccionadas',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Add custom skill
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _customSkillController,
+                          style: TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Agregar nueva habilidad...',
+                            hintStyle: TextStyle(color: Colors.grey[600]),
+                            fillColor: Color(0xFF0D1117),
+                            filled: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final skillName = _customSkillController.text.trim();
+                          if (skillName.isEmpty) return;
+
+                          final existingTag = _tags.firstWhere(
+                            (tag) => tag['name'].toLowerCase() == skillName.toLowerCase(),
+                            orElse: () => {},
+                          );
+
+                          if (existingTag.isNotEmpty) {
+                            if (!_selectedTagIds.contains(existingTag['id'])) {
+                              setModalState(() {
+                                _selectedTagIds.add(existingTag['id']);
+                                _selectedTagNames.add(existingTag['name']);
+                              });
+                              setState(() {});
+                            }
+                          } else {
+                            final newTag = await _createTag(skillName);
+                            if (newTag != null) {
+                              setModalState(() {
+                                _tags.add(newTag);
+                                _selectedTagIds.add(newTag['id']);
+                                _selectedTagNames.add(newTag['name']);
+                              });
+                              setState(() {});
+                            }
+                          }
+                          _customSkillController.clear();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green[600],
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        ),
+                        child: Icon(Icons.add, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _tags.length,
+                      itemBuilder: (context, index) {
+                        final tag = _tags[index];
+                        final isSelected = _selectedTagIds.contains(tag['id']);
+                        
+                        return CheckboxListTile(
+                          title: Text(tag['name'], style: TextStyle(color: Colors.white)),
+                          value: isSelected,
+                          activeColor: Colors.green[600],
+                          checkColor: Colors.white,
+                          onChanged: (value) {
+                            setModalState(() {
+                              if (value == true) {
+                                if (!_selectedTagIds.contains(tag['id'])) {
+                                  _selectedTagIds.add(tag['id']);
+                                  _selectedTagNames.add(tag['name']);
+                                }
+                              } else {
+                                _selectedTagIds.remove(tag['id']);
+                                _selectedTagNames.remove(tag['name']);
+                              }
+                            });
+                            setState(() {});
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  
+                  SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[600],
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        'Confirmar (${_selectedTagIds.length})',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEquipmentSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Color(0xFF161B22),
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Seleccionar Equipamiento',
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: Colors.grey[400]),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '${_selectedEquipment.length} seleccionados',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Add custom equipment
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _customEquipmentController,
+                          style: TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Agregar nuevo equipo...',
+                            hintStyle: TextStyle(color: Colors.grey[600]),
+                            fillColor: Color(0xFF0D1117),
+                            filled: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final equipmentName = _customEquipmentController.text.trim();
+                          if (equipmentName.isEmpty) return;
+
+                          final existingEquipment = _equipmentList.firstWhere(
+                            (equipment) => equipment['name'].toLowerCase() == equipmentName.toLowerCase(),
+                            orElse: () => {},
+                          );
+
+                          if (existingEquipment.isNotEmpty) {
+                            if (!_selectedEquipment.any((e) => e['id'] == existingEquipment['id'])) {
+                              setModalState(() {
+                                _selectedEquipment.add({
+                                  'id': existingEquipment['id'],
+                                  'name': existingEquipment['name'],
+                                  'required': false,
+                                  'main_quantity': 1,
+                                  'is_experienced': false,
+                                  'experience_years': 0,
+                                });
+                              });
+                              setState(() {});
+                            }
+                          } else {
+                            final newEquipment = await _createEquipment(equipmentName);
+                            if (newEquipment != null) {
+                              setModalState(() {
+                                _equipmentList.add(newEquipment);
+                                _selectedEquipment.add({
+                                  'id': newEquipment['id'],
+                                  'name': newEquipment['name'],
+                                  'required': false,
+                                  'main_quantity': 1,
+                                  'is_experienced': false,
+                                  'experience_years': 0,
+                                });
+                              });
+                              setState(() {});
+                            }
+                          }
+                          _customEquipmentController.clear();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue[600],
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        ),
+                        child: Icon(Icons.add, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _equipmentList.length,
+                      itemBuilder: (context, index) {
+                        final equipment = _equipmentList[index];
+                        final isSelected = _selectedEquipment.any((e) => e['id'] == equipment['id']);
+                        
+                        return CheckboxListTile(
+                          title: Text(equipment['name'], style: TextStyle(color: Colors.white)),
+                          subtitle: equipment['description'] != null
+                              ? Text(equipment['description'], style: TextStyle(color: Colors.grey[500], fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)
+                              : null,
+                          value: isSelected,
+                          activeColor: Colors.blue[600],
+                          checkColor: Colors.white,
+                          onChanged: (value) {
+                            setModalState(() {
+                              if (value == true) {
+                                if (!_selectedEquipment.any((e) => e['id'] == equipment['id'])) {
+                                  _selectedEquipment.add({
+                                    'id': equipment['id'],
+                                    'name': equipment['name'],
+                                    'required': false,
+                                    'main_quantity': 1,
+                                    'is_experienced': false,
+                                    'experience_years': 0,
+                                  });
+                                }
+                              } else {
+                                _selectedEquipment.removeWhere((e) => e['id'] == equipment['id']);
+                              }
+                            });
+                            setState(() {});
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  
+                  SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[600],
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Text(
+                        'Confirmar (${_selectedEquipment.length})',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _removeRole(String roleId, String roleName) {
     setState(() {
-      _isLoading = false;
+      _selectedJobRoleIds.remove(roleId);
+      _selectedJobRoleNames.remove(roleName);
     });
   }
 
@@ -341,60 +779,6 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
     setState(() {
       _selectedTagIds.remove(tagId);
       _selectedTagNames.remove(tagName);
-    });
-  }
-
-  void _addEquipment() async {
-    final equipmentName = _customEquipmentController.text.trim();
-    if (equipmentName.isEmpty) return;
-
-    final existingEquipment = _equipmentList.firstWhere(
-      (equipment) => equipment['name'].toLowerCase() == equipmentName.toLowerCase(),
-      orElse: () => {},
-    );
-
-    if (existingEquipment.isNotEmpty) {
-      if (!_selectedEquipment.any((e) => e['id'] == existingEquipment['id'])) {
-        setState(() {
-          _selectedEquipment.add({
-            'id': existingEquipment['id'],
-            'name': existingEquipment['name'],
-            'required': false, 
-            'main_quantity': 1,
-            'is_experienced': false, 
-            'experience_years': 0,
-          });
-        });
-      }
-    } else {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final newEquipment = await _createEquipment(equipmentName);
-      
-      if (newEquipment != null) {
-        setState(() {
-          _equipmentList.add(newEquipment);
-          _selectedEquipment.add({
-            'id': newEquipment['id'],
-            'name': newEquipment['name'],
-            'required': false, 
-            'main_quantity': 1,
-            'is_experienced': false,
-            'experience_years': 0,
-          });
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al crear el equipo')),
-        );
-      }
-    }
-
-    _customEquipmentController.clear();
-    setState(() {
-      _isLoading = false;
     });
   }
 
@@ -439,7 +823,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
 
     if (_payRate <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('La tarifa de pago debe ser mayor a 0')),
+        SnackBar(content: Text('La cantidad de pago debe ser mayor a 0')),
       );
       return;
     }
@@ -466,7 +850,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
         "quantity_required": _numberOfPositions,
         "pay_rate": _payRate,
         "currency": _currency,
-        "job_role_ids": _selectedJobRoleIds, 
+        "job_role_ids": _selectedJobRoleIds,
         "tag_ids": _selectedTagIds,
         "required_equipment": _selectedEquipment.map((equipment) {
           return {
@@ -480,10 +864,6 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
         "confirmation_window_minutes": _confirmationWindowHours * 60,
       };
 
-      print('=== CREANDO POSICIÓN ===');
-      print('Event ID: ${widget.eventId}');
-      print('Datos: $requestBody');
-
       final response = await http.post(
         Uri.parse('$baseUrl/positions/'),
         headers: {
@@ -492,11 +872,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode(requestBody),
-      ).timeout(Duration(seconds: 30));
+      ).timeout(Duration(seconds: 15));
 
-      print('Respuesta: ${response.statusCode} - ${response.body}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.isSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('¡Posición creada exitosamente!'),
@@ -508,34 +886,12 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
         await Future.delayed(Duration(milliseconds: 2500));
         
         if (mounted) {
-          Navigator.pop(context, true); 
+          Navigator.pop(context, true);
         }
       } else {
-        String errorMessage = 'Error al crear posición: ${response.statusCode}';
-        try {
-          final errorData = jsonDecode(response.body);
-          if (errorData['detail'] != null) {
-            errorMessage = errorData['detail'].toString();
-          } else if (errorData is Map) {
-            final errors = <String>[];
-            errorData.forEach((key, value) {
-              if (value is List) {
-                errors.add('$key: ${value.join(', ')}');
-              } else {
-                errors.add('$key: $value');
-              }
-            });
-            if (errors.isNotEmpty) {
-              errorMessage = errors.join('\n');
-            }
-          }
-        } catch (e) {
-          print('Error parsing response: $e');
-        }
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
+            content: Text(response.friendlyErrorMessage),
             backgroundColor: Colors.red[600],
             duration: Duration(seconds: 5),
           ),
@@ -545,7 +901,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
       print('Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error de conexión: ${e.toString()}'),
+          content: Text(ApiErrorHandler.handleNetworkException(e)),
           backgroundColor: Colors.red[600],
         ),
       );
@@ -611,7 +967,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'TARIFA DE PAGO (POR DÍA/EVENTO)',
+          'PAGO POR LLAMADO',
           style: TextStyle(
             color: Colors.grey[400],
             fontSize: 12,
@@ -657,7 +1013,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                 },
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'La tarifa de pago es requerida';
+                    return 'El pago es requerido';
                   }
                   final parsed = double.tryParse(value);
                   if (parsed == null || parsed <= 0) {
@@ -733,74 +1089,39 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        SizedBox(height: 8),
-        Text(
-          'Selecciona los roles:',
-          style: TextStyle(
-            color: Colors.grey[500],
-            fontSize: 11,
+        SizedBox(height: 12),
+        
+        // Button to open selector
+        InkWell(
+          onTap: _showRoleSelector,
+          child: Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Color(0xFF0D1117),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Color(0xFF30363D), width: 1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedJobRoleIds.isEmpty 
+                      ? 'Seleccionar roles...' 
+                      : '${_selectedJobRoleIds.length} roles seleccionados',
+                  style: TextStyle(
+                    color: _selectedJobRoleIds.isEmpty ? Colors.grey[600] : Colors.white,
+                    fontSize: 14,
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios, color: Colors.grey[600], size: 16),
+              ],
+            ),
           ),
         ),
-        SizedBox(height: 8),
         
-        if (_isLoadingData)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Center(
-              child: CircularProgressIndicator(
-                color: Colors.blue[600],
-                strokeWidth: 2,
-              ),
-            ),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _jobRoles.map((role) {
-              final isSelected = _selectedJobRoleIds.contains(role['id']);
-              return ChoiceChip(
-                label: Text(role['name'], style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey[400],
-                  fontSize: 12,
-                )),
-                selected: isSelected,
-                onSelected: (selected) {
-                  setState(() {
-                    if (selected) {
-                      if (!_selectedJobRoleIds.contains(role['id'])) {
-                        _selectedJobRoleIds.add(role['id']);
-                        _selectedJobRoleNames.add(role['name']);
-                      }
-                    } else {
-                      _selectedJobRoleIds.remove(role['id']);
-                      _selectedJobRoleNames.remove(role['name']);
-                    }
-                  });
-                },
-                backgroundColor: Color(0xFF0D1117),
-                selectedColor: Colors.purple[600],
-                side: BorderSide(
-                  color: isSelected ? Colors.purple[400]! : Color(0xFF30363D),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              );
-            }).toList(),
-          ),
-        
+        // Selected roles chips
         if (_selectedJobRoleNames.isNotEmpty) ...[
-          SizedBox(height: 16),
-          Text(
-            'Roles seleccionados:',
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8),
+          SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -809,10 +1130,10 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
               final roleName = entry.value;
               final roleId = _selectedJobRoleIds[index];
               return Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.purple[900]!.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.purple[900]!.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.purple[400]!, width: 1),
                 ),
                 child: Row(
@@ -820,17 +1141,12 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                   children: [
                     Text(
                       roleName,
-                      style: TextStyle(color: Colors.purple[300], fontSize: 12),
+                      style: TextStyle(color: Colors.purple[200], fontSize: 13),
                     ),
                     SizedBox(width: 6),
                     GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedJobRoleIds.remove(roleId);
-                          _selectedJobRoleNames.remove(roleName);
-                        });
-                      },
-                      child: Icon(Icons.close, color: Colors.purple[300], size: 14),
+                      onTap: () => _removeRole(roleId, roleName),
+                      child: Icon(Icons.close, color: Colors.purple[200], size: 16),
                     ),
                   ],
                 ),
@@ -842,366 +1158,247 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
     );
   }
 
-  Widget _buildTagsSection(String title, List<Map<String, dynamic>> items, 
-      TextEditingController controller, Function() onAdd, {bool isSkills = true}) {
+  Widget _buildSkillsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          title,
+          'HABILIDADES REQUERIDAS',
           style: TextStyle(
             color: Colors.grey[400],
             fontSize: 12,
             fontWeight: FontWeight.bold,
           ),
         ),
-        SizedBox(height: 8),
-        
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: controller,
-                style: TextStyle(color: Colors.white, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Agregar nuevo...',
-                  hintStyle: TextStyle(color: Colors.grey[600]),
-                  fillColor: Color(0xFF0D1117),
-                  filled: true,
-                  contentPadding: EdgeInsets.all(12),
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue[600]!, width: 1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: onAdd,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-              child: _isLoading 
-                  ? SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Text('Agregar'),
-            ),
-          ],
-        ),
-        
         SizedBox(height: 12),
         
-        Text(
-          'O selecciona de la lista:',
-          style: TextStyle(
-            color: Colors.grey[500],
-            fontSize: 11,
+        InkWell(
+          onTap: _showSkillSelector,
+          child: Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Color(0xFF0D1117),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Color(0xFF30363D), width: 1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedTagIds.isEmpty 
+                      ? 'Seleccionar habilidades...' 
+                      : '${_selectedTagIds.length} habilidades seleccionadas',
+                  style: TextStyle(
+                    color: _selectedTagIds.isEmpty ? Colors.grey[600] : Colors.white,
+                    fontSize: 14,
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios, color: Colors.grey[600], size: 16),
+              ],
+            ),
           ),
         ),
-        SizedBox(height: 8),
         
-        if (_isLoadingData)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Center(
-              child: CircularProgressIndicator(
-                color: Colors.blue[600],
-                strokeWidth: 2,
+        if (_selectedTagNames.isNotEmpty) ...[
+          SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _selectedTagNames.asMap().entries.map((entry) {
+              final index = entry.key;
+              final tagName = entry.value;
+              final tagId = _selectedTagIds[index];
+              return Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.green[900]!.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green[400]!, width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      tagName,
+                      style: TextStyle(color: Colors.green[200], fontSize: 13),
+                    ),
+                    SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => _removeSkill(tagId, tagName),
+                      child: Icon(Icons.close, color: Colors.green[200], size: 16),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEquipmentSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'EQUIPAMIENTO REQUERIDO',
+          style: TextStyle(
+            color: Colors.grey[400],
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 12),
+        
+        InkWell(
+          onTap: _showEquipmentSelector,
+          child: Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Color(0xFF0D1117),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Color(0xFF30363D), width: 1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedEquipment.isEmpty 
+                      ? 'Seleccionar equipamiento...' 
+                      : '${_selectedEquipment.length} equipos seleccionados',
+                  style: TextStyle(
+                    color: _selectedEquipment.isEmpty ? Colors.grey[600] : Colors.white,
+                    fontSize: 14,
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios, color: Colors.grey[600], size: 16),
+              ],
+            ),
+          ),
+        ),
+        
+        if (_selectedEquipment.isNotEmpty) ...[
+          SizedBox(height: 12),
+          ..._selectedEquipment.asMap().entries.map((entry) {
+            final index = entry.key;
+            final equipment = entry.value;
+            return Container(
+              padding: EdgeInsets.all(12),
+              margin: EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Color(0xFF0D1117),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[700]!, width: 1),
               ),
-            ),
-          )
-        else if (isSkills)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _tags.map((tag) {
-              final isSelected = _selectedTagIds.contains(tag['id']);
-              return ChoiceChip(
-                label: Text(tag['name'], style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey[400],
-                  fontSize: 12,
-                )),
-                selected: isSelected,
-                onSelected: (selected) {
-                  setState(() {
-                    if (selected) {
-                      if (!_selectedTagIds.contains(tag['id'])) {
-                        _selectedTagIds.add(tag['id']);
-                        _selectedTagNames.add(tag['name']);
-                      }
-                    } else {
-                      _selectedTagIds.remove(tag['id']);
-                      _selectedTagNames.remove(tag['name']);
-                    }
-                  });
-                },
-                backgroundColor: Color(0xFF0D1117),
-                selectedColor: Colors.green[600], 
-                side: BorderSide(
-                  color: isSelected ? Colors.green[400]! : Color(0xFF30363D),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              );
-            }).toList(),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _equipmentList.map((equipment) {
-              final isSelected = _selectedEquipment.any((e) => e['id'] == equipment['id']);
-              return ChoiceChip(
-                label: Text(equipment['name'], style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey[400],
-                  fontSize: 12,
-                )),
-                selected: isSelected,
-                onSelected: (selected) {
-                  setState(() {
-                    if (selected) {
-                      if (!_selectedEquipment.any((e) => e['id'] == equipment['id'])) {
-                        _selectedEquipment.add({
-                          'id': equipment['id'],
-                          'name': equipment['name'],
-                          'required': false, 
-                          'main_quantity': 1,
-                          'is_experienced': false,
-                          'experience_years': 0,
-                        });
-                      }
-                    } else {
-                      _selectedEquipment.removeWhere((e) => e['id'] == equipment['id']);
-                    }
-                  });
-                },
-                backgroundColor: Color(0xFF0D1117),
-                selectedColor: Colors.blue[600], 
-                side: BorderSide(
-                  color: isSelected ? Colors.blue[400]! : Color(0xFF30363D),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              );
-            }).toList(),
-          ),
-        
-        if ((isSkills && _selectedTagNames.isNotEmpty) ||
-            (!isSkills && _selectedEquipment.isNotEmpty)) ...[
-          SizedBox(height: 16),
-          Text(
-            '${title.toLowerCase().split(' ')[0]} agregados:',
-            style: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: isSkills
-                ? _selectedTagNames.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final tagName = entry.value;
-                    final tagId = _selectedTagIds[index];
-                    return Container(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green[900]!.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.green[400]!, width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            tagName,
-                            style: TextStyle(color: Colors.green[300], fontSize: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          equipment['name'],
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
-                          SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () => _removeSkill(tagId, tagName),
-                            child: Icon(Icons.close, color: Colors.green[300], size: 14),
-                          ),
-                        ],
+                        ),
                       ),
-                    );
-                  }).toList()
-                : _selectedEquipment.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final equipment = entry.value;
-                    return Container(
-                      padding: EdgeInsets.all(12),
-                      margin: EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Color(0xFF0D1117),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue[400]!, width: 1),
+                      IconButton(
+                        icon: Icon(Icons.close, color: Colors.grey[400], size: 18),
+                        onPressed: () => _removeEquipment(index),
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  equipment['name'],
-                                  style: TextStyle(
-                                    color: Colors.blue[300],
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                    ],
+                  ),
+                  SizedBox(height: 12),
+                  
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: Checkbox(
+                                value: equipment['required'],
+                                onChanged: (value) => _updateEquipmentRequirement(index, value),
+                                activeColor: Colors.blue[600],
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                              GestureDetector(
-                                onTap: () => _removeEquipment(index),
-                                child: Icon(Icons.close, color: Colors.blue[300], size: 18),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 12),
-                          
-                          Text(
-                            'CONDICIONES DE USO',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
                             ),
-                          ),
-                          SizedBox(height: 8),
-                          
-                          Row(
-                            children: [
-                              
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Checkbox(
-                                      value: equipment['required'],
-                                      onChanged: (value) => _updateEquipmentRequirement(index, value),
-                                      activeColor: Colors.blue[600],
-                                      checkColor: Colors.white,
-                                      fillColor: MaterialStateProperty.resolveWith<Color>((states) {
-                                        if (states.contains(MaterialState.selected)) {
-                                          return Colors.blue[600]!;
-                                        }
-                                        return Colors.grey[700]!;
-                                      }),
-                                    ),
-                                    SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        'Debe tenerlo',
-                                        style: TextStyle(
-                                          color: Colors.grey[400],
-                                          fontSize: 11,
-                                        ),
-                                        maxLines: 2,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              
-                              SizedBox(width: 16),
-                              
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Checkbox(
-                                      value: equipment['is_experienced'],
-                                      onChanged: (value) => _updateEquipmentExperience(index, value),
-                                      activeColor: Colors.blue[600],
-                                      checkColor: Colors.white,
-                                      fillColor: MaterialStateProperty.resolveWith<Color>((states) {
-                                        if (states.contains(MaterialState.selected)) {
-                                          return Colors.blue[600]!;
-                                        }
-                                        return Colors.grey[700]!;
-                                      }),
-                                    ),
-                                    SizedBox(width: 4),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Experiencia\nSabe usarlo',
-                                            style: TextStyle(
-                                              color: Colors.grey[400],
-                                              fontSize: 11,
-                                            ),
-                                            maxLines: 2,
-                                          ),
-                                          if (equipment['is_experienced']) ...[
-                                            SizedBox(height: 4),
-                                            SizedBox(
-                                              width: 80,
-                                              child: TextFormField(
-                                                initialValue: equipment['experience_years'].toString(),
-                                                keyboardType: TextInputType.number,
-                                                style: TextStyle(color: Colors.white, fontSize: 11),
-                                                decoration: InputDecoration(
-                                                  hintText: 'Años',
-                                                  hintStyle: TextStyle(color: Colors.grey[600], fontSize: 11),
-                                                  fillColor: Color(0xFF0D1117),
-                                                  filled: true,
-                                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  border: OutlineInputBorder(
-                                                    borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  enabledBorder: OutlineInputBorder(
-                                                    borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  focusedBorder: OutlineInputBorder(
-                                                    borderSide: BorderSide(color: Colors.blue[600]!, width: 1),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                ),
-                                                onChanged: (value) => _updateExperienceYears(index, value),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                            SizedBox(width: 8),
+                            Text(
+                              'Debe tenerlo',
+                              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
-                    );
-                  }).toList(),
-          ),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: Checkbox(
+                                value: equipment['is_experienced'],
+                                onChanged: (value) => _updateEquipmentExperience(index, value),
+                                activeColor: Colors.blue[600],
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Con experiencia',
+                              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  if (equipment['is_experienced']) ...[
+                    SizedBox(height: 8),
+                    SizedBox(
+                      width: 120,
+                      child: TextFormField(
+                        initialValue: equipment['experience_years'].toString(),
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          labelText: 'Años de experiencia',
+                          labelStyle: TextStyle(color: Colors.grey[500], fontSize: 11),
+                          fillColor: Color(0xFF0D1117),
+                          filled: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue[600]!, width: 1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        onChanged: (value) => _updateExperienceYears(index, value),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
         ],
       ],
     );
@@ -1244,7 +1441,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           _confirmationWindowHours,
           (value) => setState(() => _confirmationWindowHours = value),
           min: 1,
-          max: 168, // 7 días
+          max: 168,
         ),
       ],
     );
@@ -1264,7 +1461,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            'Crear Orden de Ejecución',
+            'Activar rol',
             style: TextStyle(color: Colors.white),
           ),
           elevation: 0,
@@ -1285,29 +1482,14 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            'Crear Orden de Ejecución',
+            'Activar rol',
             style: TextStyle(color: Colors.white),
           ),
           elevation: 0,
         ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, color: Colors.red[400], size: 48),
-              SizedBox(height: 16),
-              Text(
-                _errorLoadingData,
-                style: TextStyle(color: Colors.grey[400]),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadInitialData,
-                child: Text('Reintentar'),
-              ),
-            ],
-          ),
+        body: ApiErrorHandler.buildErrorWidget(
+          message: _errorLoadingData,
+          onRetry: _loadInitialData,
         ),
       );
     }
@@ -1321,7 +1503,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Crear Orden de Ejecución',
+          'Activar rol',
           style: TextStyle(color: Colors.white),
         ),
         elevation: 0,
@@ -1340,7 +1522,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Agregando posición para:',
+                        'Agregando rol para:',
                         style: TextStyle(
                           color: Colors.grey[400],
                           fontSize: 12,
@@ -1461,22 +1643,10 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                       ),
                       SizedBox(height: 20),
 
-                      _buildTagsSection(
-                        'HABILIDADES REQUERIDAS ',
-                        _tags,
-                        _customSkillController,
-                        _addSkill,
-                        isSkills: true,
-                      ),
+                      _buildSkillsSection(),
                       SizedBox(height: 20),
 
-                      _buildTagsSection(
-                        'EQUIPAMIENTO REQUERIDO',
-                        _equipmentList,
-                        _customEquipmentController,
-                        _addEquipment,
-                        isSkills: false,
-                      ),
+                      _buildEquipmentSection(),
                       SizedBox(height: 20),
 
                       Divider(color: Color(0xFF30363D)),
@@ -1543,7 +1713,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                                 ),
                               )
                             : Text(
-                                'Crear Orden de Ejecución',
+                                'Activar rol',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
