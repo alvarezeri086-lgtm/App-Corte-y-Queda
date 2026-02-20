@@ -46,6 +46,7 @@ class AuthProvider with ChangeNotifier {
 
           getUserInfo().catchError((error) {
             print('No se pudo refrescar user info: $error');
+            return null;
           });
         }
       }

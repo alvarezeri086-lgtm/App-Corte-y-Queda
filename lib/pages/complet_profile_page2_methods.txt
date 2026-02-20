@@ -1,0 +1,53 @@
+  // Obtener solo los tags de los roles seleccionados
+  List<Map<String, dynamic>> _getHabilidadesForSelectedRoles() {
+    if (_rolesSeleccionados.isEmpty) return [];
+    
+    final habilidadesMap = <String, Map<String, dynamic>>{};
+    
+    for (var rolSeleccionado in _rolesSeleccionados) {
+      final roleId = rolSeleccionado['job_role_id'].toString();
+      final fullRole = _rolesDisponiblesWithChildren.firstWhere(
+        (r) => r['id'].toString() == roleId,
+        orElse: () => {},
+      );
+      
+      if (fullRole.isNotEmpty && fullRole['tags'] is List) {
+        for (var tag in fullRole['tags']) {
+          final tagId = tag['id'].toString();
+          habilidadesMap[tagId] = {
+            'id': tagId,
+            'name': tag['name']?.toString() ?? 'Sin nombre',
+          };
+        }
+      }
+    }
+    
+    return habilidadesMap.values.toList();
+  }
+
+  // Obtener solo los equipos de los roles seleccionados  
+  List<Map<String, dynamic>> _getEquiposForSelectedRoles() {
+    if (_rolesSeleccionados.isEmpty) return [];
+    
+    final equiposMap = <String, Map<String, dynamic>>{};
+    
+    for (var rolSeleccionado in _rolesSeleccionados) {
+      final roleId = rolSeleccionado['job_role_id'].toString();
+      final fullRole = _rolesDisponiblesWithChildren.firstWhere(
+        (r) => r['id'].toString() == roleId,
+        orElse: () => {},
+      );
+      
+      if (fullRole.isNotEmpty && fullRole['equipment'] is List) {
+        for (var equipo in fullRole['equipment']) {
+          final equipoId = equipo['id'].toString();
+          equiposMap[equipoId] = {
+            'id': equipoId,
+            'name': equipo['name']?.toString() ?? 'Sin nombre',
+          };
+        }
+      }
+    }
+    
+    return equiposMap.values.toList();
+  }

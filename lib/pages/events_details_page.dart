@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'package:intl/intl.dart';
 import 'create_posicion_page.dart';
-import '../utils/error_handler.dart';
+import '../utils/error_handler.dart'; 
 
 class EventDetailsPage extends StatefulWidget {
   final String? eventId;
@@ -87,8 +87,18 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
       ).timeout(Duration(seconds: 15));
 
       if (response.isSuccess) {
+        final responseBody = jsonDecode(response.body);
+        
+        Map<String, dynamic> eventData = {};
+        
+        if (responseBody.containsKey('event') && responseBody['event'] is Map) {
+          eventData = Map<String, dynamic>.from(responseBody['event']);
+        } else if (responseBody.containsKey('id')) {
+          eventData = Map<String, dynamic>.from(responseBody);
+        }
+        
         setState(() {
-          _eventData = jsonDecode(response.body);
+          _eventData = eventData;
         });
       } else {
         setState(() {
@@ -96,7 +106,6 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
         });
       }
     } catch (e) {
-      print('Excepción al cargar evento: $e');
       setState(() {
         _errorMessage = ApiErrorHandler.handleNetworkException(e);
       });
@@ -125,42 +134,46 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     });
 
     try {
-      // UNA SOLA LLAMADA para obtener todas las posiciones del evento
-      final listResponse = await http.get(
-        Uri.parse('$baseUrl/positions/?event_id=$_eventId'),
+      // Cargar desde /events/positions y filtrar por event_id
+      final response = await http.get(
+        Uri.parse('$baseUrl/events/positions'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       ).timeout(Duration(seconds: 15));
 
-      if (listResponse.isSuccess) {
-        final data = jsonDecode(listResponse.body);
-        List<dynamic> positionsList = [];
+      if (response.statusCode == 200) {
+        final responseBody = jsonDecode(response.body);
         
-        if (data is List) {
-          positionsList = data;
-        } else if (data is Map) {
-          if (data.containsKey('id')) {
-            positionsList = [data];
-          } else if (data['items'] is List) {
-            positionsList = data['items'];
-          } else if (data['data'] is List) {
-            positionsList = data['data'];
-          } else if (data['results'] is List) {
-            positionsList = data['results'];
-          }
+        List<dynamic> eventsWithPositions = responseBody is List
+            ? responseBody
+            : (responseBody['items'] ?? responseBody['data'] ?? []);
+
+        // Encontrar el evento con el event_id que buscamos
+        var eventData = eventsWithPositions.firstWhere(
+          (e) => e['event_id']?.toString() == _eventId,
+          orElse: () => null,
+        );
+
+        if (eventData == null) {
+          setState(() {
+            _isLoadingPositions = false;
+            _positions = [];
+            _positionDetails = {};
+          });
+          return;
         }
 
-        // Procesar todas las posiciones directamente desde la respuesta
-        // SIN hacer llamadas adicionales individuales
+        // Obtener las posiciones del evento
+        List<dynamic> eventPositions = eventData['event_positions'] ?? [];
+
         List<Map<String, dynamic>> processedPositions = [];
         Map<String, Map<String, dynamic>> details = {};
         
-        for (var position in positionsList) {
-          final positionId = position['id']?.toString() ?? '';
+        for (var position in eventPositions) {
+          final positionId = position['position_id']?.toString() ?? position['id']?.toString() ?? '';
           
-          // Guardar datos básicos para la lista
           processedPositions.add({
             'id': positionId,
             'role_name': position['role_name']?.toString() ?? 'Sin nombre',
@@ -172,7 +185,6 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
             'organization_id': position['organization_id']?.toString(),
           });
           
-          // Guardar detalles completos (candidatos, freelancer confirmado, etc.)
           details[positionId] = {
             'id': positionId,
             'event_id': position['event_id']?.toString() ?? '',
@@ -183,8 +195,8 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
             'currency': position['currency']?.toString() ?? 'USD',
             'visibility': position['visibility']?.toString() ?? 'PRIVATE',
             'fill_stage': position['fill_stage']?.toString() ?? 'LIST_READY',
-            'activation_candidates': position['activation_candidates'] ?? [],
-            'confirmed_freelancer': position['confirmed_freelancer'] ?? {},
+            'candidates': position['candidates'] ?? [],
+            'confirmed_freelancers': position['confirmed_freelancers'] ?? {},
           };
         }
 
@@ -201,7 +213,6 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
         });
       }
     } catch (e) {
-      print('Error cargando posiciones: $e');
       setState(() {
         _isLoading = false;
         _isLoadingPositions = false;
@@ -260,8 +271,9 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     final positionId = position['id'];
     final detailedPosition = _positionDetails[positionId];
     final hasConfirmedFreelancer = detailedPosition != null && 
-        detailedPosition['confirmed_freelancer'] != null && 
-        detailedPosition['confirmed_freelancer'].isNotEmpty;
+        detailedPosition['confirmed_freelancers'] != null && 
+        detailedPosition['confirmed_freelancers'] is Map &&
+        (detailedPosition['confirmed_freelancers'] as Map).isNotEmpty;
 
     return Container(
       margin: EdgeInsets.only(bottom: 16),
@@ -334,12 +346,12 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
           SizedBox(height: 12),
           
           if (detailedPosition != null) ...[
-            if (detailedPosition['activation_candidates'] is List && 
-                detailedPosition['activation_candidates'].isNotEmpty)
+            if (detailedPosition['candidates'] is List && 
+                detailedPosition['candidates'].isNotEmpty)
               _buildCandidateInfo(detailedPosition),
             
             if (hasConfirmedFreelancer)
-              _buildConfirmedFreelancerInfo(detailedPosition['confirmed_freelancer']),
+              _buildConfirmedFreelancerInfo(Map<String, dynamic>.from(detailedPosition['confirmed_freelancers'] ?? {})),
           ],
           
           Container(
@@ -444,7 +456,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
   }
 
   Widget _buildCandidateInfo(Map<String, dynamic> position) {
-    final candidates = position['activation_candidates'] as List;
+    final candidates = position['candidates'] as List;
     return Container(
       margin: EdgeInsets.only(bottom: 8),
       padding: EdgeInsets.all(12),
@@ -932,7 +944,6 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                             ),
                             SizedBox(height: 24),
 
-                            // Activaciones del llamado
                             Container(
                               padding: EdgeInsets.all(isMobile ? 16 : 24),
                               decoration: BoxDecoration(
@@ -1013,7 +1024,6 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                             ),
                             SizedBox(height: 24),
 
-                            // Validaciones
                             Container(
                               padding: EdgeInsets.all(isMobile ? 16 : 24),
                               decoration: BoxDecoration(

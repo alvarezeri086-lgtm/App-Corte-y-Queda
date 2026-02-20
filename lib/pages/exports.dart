@@ -16,3 +16,4 @@ export 'portal_freelancer_page.dart';
 export 'perfil_freelancer.dart';
 export 'activaciones_freelancer.dart';
 export 'perfil_company.dart';
+export 'documentos_freelancer.dart';

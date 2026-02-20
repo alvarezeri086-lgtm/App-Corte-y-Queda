@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../pages/portal_freelancer_page.dart';
-import '../pages/exports.dart'; 
+import '../pages/exports.dart';
 
 class FreelancerMainLayout extends StatefulWidget {
   final int initialIndex;
+  final String? activationId;
 
-  const FreelancerMainLayout({Key? key, this.initialIndex = 0}) : super(key: key);
+  const FreelancerMainLayout(
+      {Key? key, this.initialIndex = 0, this.activationId})
+      : super(key: key);
 
   @override
   _FreelancerMainLayoutState createState() => _FreelancerMainLayoutState();
@@ -20,9 +23,10 @@ class _FreelancerMainLayoutState extends State<FreelancerMainLayout> {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pages = [
-      FreelancerDashboardPage(),
-      FreelancerActivationsScreen(), 
-      ProfileScreen(), 
+      FreelancerDashboardPage(
+          activationIdFromNotification: widget.activationId),
+      FreelancerActivationsScreen(),
+      ProfileScreen(),
     ];
   }
 
@@ -62,9 +66,18 @@ class _FreelancerMainLayoutState extends State<FreelancerMainLayout> {
                 unselectedFontSize: 11,
                 onTap: _onItemTapped,
                 items: const [
-                  BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Panel'),
-                  BottomNavigationBarItem(icon: Icon(Icons.bolt_outlined), activeIcon: Icon(Icons.bolt), label: 'Activaciones'),
-                  BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Mi Perfil'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.dashboard_outlined),
+                      activeIcon: Icon(Icons.dashboard),
+                      label: 'Panel'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.bolt_outlined),
+                      activeIcon: Icon(Icons.bolt),
+                      label: 'Activaciones'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.person_outline),
+                      activeIcon: Icon(Icons.person),
+                      label: 'Mi Perfil'),
                 ],
               ),
             )

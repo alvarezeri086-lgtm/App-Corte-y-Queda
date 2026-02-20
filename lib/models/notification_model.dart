@@ -22,13 +22,13 @@ class PushNotification {
 
   factory PushNotification.fromRemoteMessage(RemoteMessage message) {
     final data = message.data;
-    
+
     // Mapear el tipo de notificación
     final type = _mapNotificationType(data['type'] ?? 'general');
-    
+
     // Obtener ruta y parámetros según el tipo
     final routeInfo = NotificationMapper.getRouteConfig(type, data);
-    
+
     return PushNotification(
       title: message.notification?.title,
       body: message.notification?.body,
@@ -51,13 +51,13 @@ class PushNotification {
         return NotificationType.eventPositionCancelled;
       case 'EVENT_START_TODAY':
         return NotificationType.eventStartToday;
-      
+
       // ACTIVACIONES
       case 'ACTIVATION_REMINDER_50':
         return NotificationType.activationReminder50;
       case 'ACTIVATION_REMINDER_90':
         return NotificationType.activationReminder90;
-      
+
       // ENTREVISTAS
       case 'INTERVIEW_PENDING':
         return NotificationType.interviewPending;
@@ -67,7 +67,7 @@ class PushNotification {
         return NotificationType.interviewAccepted;
       case 'INTERVIEW_PROPOSED':
         return NotificationType.interviewProposed;
-      
+
       default:
         return NotificationType.general;
     }
@@ -80,17 +80,17 @@ enum NotificationType {
   eventFinished,
   eventPositionCancelled,
   eventStartToday,
-  
+
   // Activaciones
   activationReminder50,
   activationReminder90,
-  
+
   // Entrevistas
   interviewPending,
   interviewRequired,
   interviewAccepted,
   interviewProposed,
-  
+
   // General
   general,
 }
@@ -101,7 +101,7 @@ class NotificationConfig {
   final Color color;
   final String titleKey;
   final String bodyKey;
-  
+
   NotificationConfig({
     required this.route,
     required this.icon,
@@ -142,23 +142,23 @@ class NotificationMapper {
       titleKey: 'event_start_today_title',
       bodyKey: 'event_start_today_body',
     ),
-    
+
     // ACTIVACIONES
     NotificationType.activationReminder50: NotificationConfig(
-      route: '/activations',
+      route: '/freelancer_dashboard',
       icon: Icons.notifications_active,
       color: Colors.purple,
       titleKey: 'activation_reminder_50_title',
       bodyKey: 'activation_reminder_50_body',
     ),
     NotificationType.activationReminder90: NotificationConfig(
-      route: '/activations',
+      route: '/freelancer_dashboard',
       icon: Icons.notifications_active,
       color: Colors.deepPurple,
       titleKey: 'activation_reminder_90_title',
       bodyKey: 'activation_reminder_90_body',
     ),
-    
+
     // ENTREVISTAS
     NotificationType.interviewPending: NotificationConfig(
       route: '/interviews',
@@ -188,7 +188,7 @@ class NotificationMapper {
       titleKey: 'interview_proposed_title',
       bodyKey: 'interview_proposed_body',
     ),
-    
+
     // GENERAL
     NotificationType.general: NotificationConfig(
       route: '/notifications',
@@ -200,14 +200,12 @@ class NotificationMapper {
   };
 
   static Map<String, dynamic> getRouteConfig(
-    NotificationType type, 
-    Map<String, dynamic> data
-  ) {
+      NotificationType type, Map<String, dynamic> data) {
     final config = _configs[type] ?? _configs[NotificationType.general]!;
-    
+
     // Parámetros específicos por tipo
     Map<String, dynamic> parameters = {};
-    
+
     switch (type) {
       case NotificationType.eventCancelled:
       case NotificationType.eventFinished:
@@ -218,7 +216,7 @@ class NotificationMapper {
           'notificationType': type.toString(),
         };
         break;
-        
+
       case NotificationType.eventPositionCancelled:
         parameters = {
           'eventId': data['event_id'],
@@ -226,7 +224,7 @@ class NotificationMapper {
           'tabIndex': 2, // Pestaña de "Cancelados"
         };
         break;
-        
+
       case NotificationType.activationReminder50:
       case NotificationType.activationReminder90:
         parameters = {
@@ -235,7 +233,7 @@ class NotificationMapper {
           'showReminder': true,
         };
         break;
-        
+
       case NotificationType.interviewPending:
       case NotificationType.interviewRequired:
         parameters = {
@@ -243,23 +241,23 @@ class NotificationMapper {
           'refreshList': true,
         };
         break;
-        
+
       case NotificationType.interviewAccepted:
       case NotificationType.interviewProposed:
         parameters = {
           'interviewId': data['interview_id'],
-          'status': type == NotificationType.interviewAccepted 
-              ? 'accepted' 
+          'status': type == NotificationType.interviewAccepted
+              ? 'accepted'
               : 'proposed',
         };
         break;
-        
+
       default:
         parameters = {
           'notificationData': data,
         };
     }
-    
+
     return {
       'route': config.route,
       'parameters': parameters,
@@ -267,9 +265,10 @@ class NotificationMapper {
     };
   }
 
-  static String getLocalizedTitle(NotificationType type, Map<String, dynamic> data) {
+  static String getLocalizedTitle(
+      NotificationType type, Map<String, dynamic> data) {
     final config = _configs[type] ?? _configs[NotificationType.general]!;
-    
+
     // Aquí puedes agregar lógica para personalizar títulos con datos
     switch (type) {
       case NotificationType.eventStartToday:

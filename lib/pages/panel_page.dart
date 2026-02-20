@@ -7,7 +7,6 @@ import '../auth_provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/notification_provider.dart';
 import '../models/notification_model.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/error_handler.dart';
 
 class CompanyDashboardPage extends StatefulWidget {
@@ -385,7 +384,6 @@ class _CompanyDashboardPageState extends State<CompanyDashboardPage> {
 
   Widget _buildNotificationBell() {
     final unreadCount = Provider.of<NotificationProvider>(context).unreadCount;
-    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Stack(
       children: [

@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import '../auth_provider.dart';
-import 'package:intl/intl.dart';
 import '../utils/error_handler.dart';
 
 class CreatePositionPage extends StatefulWidget {
@@ -22,29 +21,54 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
   bool _isLoading = false;
   bool _isLoadingData = true;
   String _errorLoadingData = '';
+  
+  // Controladores para los campos de texto
+  final _payRateController = TextEditingController();
+  final _roleNameController = TextEditingController();
+  final _customSkillController = TextEditingController();
+  final _customEquipmentController = TextEditingController();
 
   List<String> _selectedJobRoleIds = [];
   List<String> _selectedJobRoleNames = [];
-  int _numberOfPositions = 1;
+  final int _numberOfPositions = 1; // Fijo en 1
   double _payRate = 0.0;
   String _currency = 'MXN';
   List<String> _selectedTagIds = [];
   List<String> _selectedTagNames = [];
   List<Map<String, dynamic>> _selectedEquipment = [];
+  bool _enableConfirmationWindow = false; // CheckBox para ventana de confirmación
   int _confirmationWindowHours = 24;
   
   List<Map<String, dynamic>> _jobRoles = [];
-  List<Map<String, dynamic>> _tags = [];
-  List<Map<String, dynamic>> _equipmentList = [];
-
-  final _roleNameController = TextEditingController();
-  final _customSkillController = TextEditingController();
-  final _customEquipmentController = TextEditingController();
+  List<Map<String, dynamic>> _jobRolesWithChildren = []; // Guardar estructura original con tags/equipos anidados
 
   @override
   void initState() {
     super.initState();
     _loadInitialData();
+    
+    // Agregar listener para el campo de pago
+    _payRateController.addListener(_onPayRateChanged);
+  }
+
+  void _onPayRateChanged() {
+    final value = _payRateController.text;
+    final parsed = double.tryParse(value);
+    if (parsed != null) {
+      setState(() {
+        _payRate = parsed;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _payRateController.removeListener(_onPayRateChanged);
+    _payRateController.dispose();
+    _roleNameController.dispose();
+    _customSkillController.dispose();
+    _customEquipmentController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -82,16 +106,18 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
     if (token == null || baseUrl == null) return;
 
     try {
+      print('📥 Cargando catálogo de roles...');
       final response = await http.get(
-        Uri.parse('$baseUrl/job-roles/'),
+        Uri.parse('$baseUrl/job-roles/with-children'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       ).timeout(Duration(seconds: 15));
 
-      if (response.isSuccess) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
+        
         List<dynamic> loadedRoles = [];
         
         if (data is List) {
@@ -102,196 +128,123 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           else if (data['results'] is List) loadedRoles = data['results'];
         }
 
+        // Extraer roles
+        List<Map<String, dynamic>> roles = [];
+        List<Map<String, dynamic>> tags = [];
+        List<Map<String, dynamic>> equipment = [];
+
+        for (var role in loadedRoles) {
+          print('📍 ${role['name']}');
+          
+          roles.add({
+            'id': role['id'].toString(),
+            'name': role['name']?.toString() ?? 'Sin nombre',
+            'description': role['description']?.toString(),
+          });
+
+          // Extraer tags del rol
+          if (role['tags'] is List) {
+            for (var tag in role['tags']) {
+              final tagMap = {
+                'id': tag['id'].toString(),
+                'name': tag['name']?.toString() ?? 'Sin nombre',
+              };
+              // Evitar duplicados
+              if (!tags.any((t) => t['id'] == tagMap['id'])) {
+                tags.add(tagMap);
+              }
+            }
+          }
+
+          // Extraer equipment del rol
+          if (role['equipment'] is List) {
+            for (var equip in role['equipment']) {
+              final equipMap = {
+                'id': equip['id'].toString(),
+                'name': equip['name']?.toString() ?? 'Sin nombre',
+              };
+              // Evitar duplicados
+              if (!equipment.any((e) => e['id'] == equipMap['id'])) {
+                equipment.add(equipMap);
+              }
+            }
+          }
+        }
+
+        print('✅ Catálogo cargado: ${roles.length} roles, ${tags.length} tags, ${equipment.length} equipos');
+
         setState(() {
-          _jobRoles = loadedRoles.map((role) {
-            return {
-              'id': role['id'].toString(),
-              'name': role['name']?.toString() ?? 'Sin nombre',
-              'description': role['description']?.toString(),
-            };
-          }).toList();
+          _jobRoles = roles;
+          _jobRolesWithChildren = loadedRoles.cast<Map<String, dynamic>>();
         });
+      } else {
+        print('❌ Error cargando catálogo');
       }
     } catch (e) {
-      print('Error loading job roles: $e');
+      print('❌ Error de conexión');
     }
+  }
+
+  // Obtener solo los tags de los roles seleccionados
+  List<Map<String, dynamic>> _getTagsForSelectedRoles() {
+    if (_selectedJobRoleIds.isEmpty) return [];
+    
+    final tagsMap = <String, Map<String, dynamic>>{};
+    
+    for (var roleId in _selectedJobRoleIds) {
+      final fullRole = _jobRolesWithChildren.firstWhere(
+        (r) => r['id'].toString() == roleId,
+        orElse: () => {},
+      );
+      
+      if (fullRole.isNotEmpty && fullRole['tags'] is List) {
+        for (var tag in fullRole['tags']) {
+          final tagId = tag['id'].toString();
+          tagsMap[tagId] = {
+            'id': tagId,
+            'name': tag['name']?.toString() ?? 'Sin nombre',
+          };
+        }
+      }
+    }
+    
+    return tagsMap.values.toList();
+  }
+
+  // Obtener solo los equipos de los roles seleccionados  
+  List<Map<String, dynamic>> _getEquipmentForSelectedRoles() {
+    if (_selectedJobRoleIds.isEmpty) return [];
+    
+    final equipmentMap = <String, Map<String, dynamic>>{};
+    
+    for (var roleId in _selectedJobRoleIds) {
+      final fullRole = _jobRolesWithChildren.firstWhere(
+        (r) => r['id'].toString() == roleId,
+        orElse: () => {},
+      );
+      
+      if (fullRole.isNotEmpty && fullRole['equipment'] is List) {
+        for (var equip in fullRole['equipment']) {
+          final equipId = equip['id'].toString();
+          equipmentMap[equipId] = {
+            'id': equipId,
+            'name': equip['name']?.toString() ?? 'Sin nombre',
+          };
+        }
+      }
+    }
+    
+    return equipmentMap.values.toList();
   }
 
   Future<void> _loadTags() async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return;
-
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tags/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      ).timeout(Duration(seconds: 15));
-
-      if (response.isSuccess) {
-        final data = jsonDecode(response.body);
-        List<dynamic> loadedTags = [];
-        
-        if (data is List) {
-          loadedTags = data;
-        } else if (data is Map) {
-          if (data['items'] is List) loadedTags = data['items'];
-          else if (data['data'] is List) loadedTags = data['data'];
-          else if (data['results'] is List) loadedTags = data['results'];
-        }
-
-        setState(() {
-          _tags = loadedTags.map((tag) {
-            return {
-              'id': tag['id'].toString(),
-              'name': tag['name']?.toString() ?? 'Sin nombre',
-              'category': tag['category']?.toString(),
-            };
-          }).toList();
-        });
-      }
-    } catch (e) {
-      print('Error loading tags: $e');
-    }
+    // Ya no es necesario, se carga en _loadJobRoles()
+    print('⏭️ Tags loaded from job-roles endpoint');
   }
 
   Future<void> _loadEquipment() async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return;
-
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/equipment/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      ).timeout(Duration(seconds: 15));
-
-      if (response.isSuccess) {
-        final data = jsonDecode(response.body);
-        List<dynamic> loadedEquipment = [];
-        
-        if (data is List) {
-          loadedEquipment = data;
-        } else if (data is Map) {
-          if (data['items'] is List) loadedEquipment = data['items'];
-          else if (data['data'] is List) loadedEquipment = data['data'];
-          else if (data['results'] is List) loadedEquipment = data['results'];
-        }
-
-        setState(() {
-          _equipmentList = loadedEquipment.map((equipment) {
-            return {
-              'id': equipment['id'].toString(),
-              'name': equipment['name']?.toString() ?? 'Sin nombre',
-              'description': equipment['description']?.toString(),
-              'category': equipment['category']?.toString(),
-            };
-          }).toList();
-        });
-      }
-    } catch (e) {
-      print('Error loading equipment: $e');
-    }
-  }
-
-  Future<Map<String, dynamic>?> _createJobRole(String name) async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return null;
-
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/job-roles/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'name': name}),
-      ).timeout(Duration(seconds: 15));
-
-      if (response.isSuccess) {
-        final newRole = jsonDecode(response.body);
-        return {
-          'id': newRole['id'].toString(),
-          'name': newRole['name']?.toString() ?? name,
-        };
-      }
-    } catch (e) {
-      print('Error creating job role: $e');
-    }
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _createTag(String name) async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return null;
-
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/tags/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'name': name}),
-      ).timeout(Duration(seconds: 15));
-
-      if (response.isSuccess) {
-        final newTag = jsonDecode(response.body);
-        return {
-          'id': newTag['id'].toString(),
-          'name': newTag['name']?.toString() ?? name,
-        };
-      }
-    } catch (e) {
-      print('Error creating tag: $e');
-    }
-    return null;
-  }
-
-  Future<Map<String, dynamic>?> _createEquipment(String name) async {
-    final baseUrl = dotenv.env['API_BASE_URL'];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.accessToken;
-
-    if (token == null || baseUrl == null) return null;
-
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/equipment/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'name': name}),
-      ).timeout(Duration(seconds: 15));
-
-      if (response.isSuccess) {
-        final newEquipment = jsonDecode(response.body);
-        return {
-          'id': newEquipment['id'].toString(),
-          'name': newEquipment['name']?.toString() ?? name,
-        };
-      }
-    } catch (e) {
-      print('Error creating equipment: $e');
-    }
-    return null;
+    // Ya no es necesario, se carga en _loadJobRoles()
+    print('⏭️ Equipment loaded from job-roles endpoint');
   }
 
   void _showRoleSelector() {
@@ -500,7 +453,8 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                           final skillName = _customSkillController.text.trim();
                           if (skillName.isEmpty) return;
 
-                          final existingTag = _tags.firstWhere(
+                          final availableTags = _getTagsForSelectedRoles();
+                          final existingTag = availableTags.firstWhere(
                             (tag) => tag['name'].toLowerCase() == skillName.toLowerCase(),
                             orElse: () => {},
                           );
@@ -514,15 +468,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                               setState(() {});
                             }
                           } else {
-                            final newTag = await _createTag(skillName);
-                            if (newTag != null) {
-                              setModalState(() {
-                                _tags.add(newTag);
-                                _selectedTagIds.add(newTag['id']);
-                                _selectedTagNames.add(newTag['name']);
-                              });
-                              setState(() {});
-                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Por favor selecciona una habilidad de la lista disponible')),
+                            );
                           }
                           _customSkillController.clear();
                         },
@@ -538,9 +486,10 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                   
                   Expanded(
                     child: ListView.builder(
-                      itemCount: _tags.length,
+                      itemCount: _getTagsForSelectedRoles().length,
                       itemBuilder: (context, index) {
-                        final tag = _tags[index];
+                        final availableTags = _getTagsForSelectedRoles();
+                        final tag = availableTags[index];
                         final isSelected = _selectedTagIds.contains(tag['id']);
                         
                         return CheckboxListTile(
@@ -656,7 +605,8 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                           final equipmentName = _customEquipmentController.text.trim();
                           if (equipmentName.isEmpty) return;
 
-                          final existingEquipment = _equipmentList.firstWhere(
+                          final availableEquipment = _getEquipmentForSelectedRoles();
+                          final existingEquipment = availableEquipment.firstWhere(
                             (equipment) => equipment['name'].toLowerCase() == equipmentName.toLowerCase(),
                             orElse: () => {},
                           );
@@ -676,21 +626,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                               setState(() {});
                             }
                           } else {
-                            final newEquipment = await _createEquipment(equipmentName);
-                            if (newEquipment != null) {
-                              setModalState(() {
-                                _equipmentList.add(newEquipment);
-                                _selectedEquipment.add({
-                                  'id': newEquipment['id'],
-                                  'name': newEquipment['name'],
-                                  'required': false,
-                                  'main_quantity': 1,
-                                  'is_experienced': false,
-                                  'experience_years': 0,
-                                });
-                              });
-                              setState(() {});
-                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Por favor selecciona un equipo de la lista disponible')),
+                            );
                           }
                           _customEquipmentController.clear();
                         },
@@ -706,9 +644,10 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                   
                   Expanded(
                     child: ListView.builder(
-                      itemCount: _equipmentList.length,
+                      itemCount: _getEquipmentForSelectedRoles().length,
                       itemBuilder: (context, index) {
-                        final equipment = _equipmentList[index];
+                        final availableEquipment = _getEquipmentForSelectedRoles();
+                        final equipment = availableEquipment[index];
                         final isSelected = _selectedEquipment.any((e) => e['id'] == equipment['id']);
                         
                         return CheckboxListTile(
@@ -811,6 +750,51 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
     });
   }
 
+  Future<bool> _verifyEvent() async {
+    final baseUrl = dotenv.env['API_BASE_URL'];
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.accessToken;
+
+    if (token == null || baseUrl == null) {
+      print('❌ No token or baseUrl');
+      return false;
+    }
+
+    try {
+      print('🔍 Verificando evento...');
+      final url = '$baseUrl/events/${widget.eventId}/';
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      ).timeout(Duration(seconds: 10));
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body);
+        final status = data['status']?.toString().toUpperCase() ?? 'UNKNOWN';
+        print('✅ Evento verificado');
+        
+        // Verificar que el evento está en un estado válido
+        if (status == 'ACTIVE' || status == 'PENDING' || status == 'OPEN') {
+          print('✅ Estado válido para crear posiciones');
+          return true;
+        } else {
+          print('❌ Estado del evento no válido');
+          return false;
+        }
+      } else {
+        print('❌ Error verificando evento');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error de conexión al verificar evento');
+      return false;
+    }
+  }
+
   Future<void> _createPosition() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -823,7 +807,14 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
 
     if (_payRate <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('La cantidad de pago debe ser mayor a 0')),
+        SnackBar(content: Text('La tarifa debe ser mayor a 0')),
+      );
+      return;
+    }
+    
+    if (_selectedTagIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Selecciona al menos una habilidad/tag')),
       );
       return;
     }
@@ -839,11 +830,22 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
       return;
     }
 
+    // Verificar que el evento existe y es válido
+    // Si falla por problemas de red, continuamos de todas formas (el backend validará)
+    final eventValid = await _verifyEvent();
+    if (!eventValid) {
+      print('⚠️ Event verification failed, but continuing (backend will validate)');
+      // No bloqueamos si falla - el servidor backend hará la validación final
+      // ScaffoldMessenger.of(context).showSnackBar(...);
+      // return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // Construir pedido con solo campos requeridos
       final Map<String, dynamic> requestBody = {
         "event_id": widget.eventId,
         "role_name": _roleNameController.text.trim(),
@@ -852,17 +854,31 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
         "currency": _currency,
         "job_role_ids": _selectedJobRoleIds,
         "tag_ids": _selectedTagIds,
-        "required_equipment": _selectedEquipment.map((equipment) {
+      };
+      
+      // Agregar equipment solo si hay elementos
+      if (_selectedEquipment.isNotEmpty) {
+        requestBody["required_equipment"] = _selectedEquipment.map((equipment) {
           return {
             "equipment_item_id": equipment['id'],
-            "required": equipment['required'],
-            "main_quantity": equipment['main_quantity'],
-            "is_experienced": equipment['is_experienced'],
-            "experience_years": equipment['experience_years'],
+            "required": equipment['required'] ?? true,
+            "main_quantity": equipment['main_quantity'] ?? 1,
           };
-        }).toList(),
-        "confirmation_window_minutes": _confirmationWindowHours * 60,
-      };
+        }).toList();
+      }
+      
+      // Solo incluir confirmation_window_minutes si está habilitado
+      if (_enableConfirmationWindow) {
+        requestBody["confirmation_window_minutes"] = _confirmationWindowHours * 60;
+      }
+
+      print('=== Creando Posición ===');
+      print('✅ Datos validados');
+      print('📊 Roles: ${_selectedJobRoleIds.length}');
+      print('🏷️ Tags: ${_selectedTagIds.length}');
+      print('🔧 Equipamiento: ${_selectedEquipment.length} items');
+      print('💰 Tarifa: $_payRate $_currency');
+      print('========================');
 
       final response = await http.post(
         Uri.parse('$baseUrl/positions/'),
@@ -874,7 +890,9 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
         body: jsonEncode(requestBody),
       ).timeout(Duration(seconds: 15));
 
-      if (response.isSuccess) {
+      print('📤 Respuesta: ${response.statusCode}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('¡Posición creada exitosamente!'),
@@ -889,9 +907,41 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           Navigator.pop(context, true);
         }
       } else {
+        String errorMessage = 'Error al crear la posición';
+        print('❌ Error: ${response.statusCode}');
+        
+        try {
+          final errorData = jsonDecode(response.body);
+          if (errorData is Map<String, dynamic>) {
+            // Buscar el campo de error más específico
+            if (errorData.containsKey('detail')) {
+              final detail = errorData['detail'];
+              if (detail is List) {
+                errorMessage = detail
+                    .map((e) => e is Map ? (e['msg'] ?? e.toString()) : e.toString())
+                    .join('\n');
+              } else {
+                errorMessage = detail.toString();
+              }
+            } else if (errorData.containsKey('message')) {
+              errorMessage = errorData['message'].toString();
+            } else if (errorData.containsKey('error')) {
+              errorMessage = errorData['error'].toString();
+            }
+          }
+        } catch (parseError) {
+          // Si no es JSON, usar el body completo
+          errorMessage = response.body.isNotEmpty 
+              ? response.body 
+              : (response.reasonPhrase ?? errorMessage);
+          print('❌ Parse error: $parseError');
+        }
+
+        print('❌ Final error message: $errorMessage');
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(response.friendlyErrorMessage),
+            content: Text(errorMessage),
             backgroundColor: Colors.red[600],
             duration: Duration(seconds: 5),
           ),
@@ -914,54 +964,6 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
     }
   }
 
-  Widget _buildNumberInput(String label, int value, Function(int) onChanged, {int min = 1, int max = 100}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        SizedBox(height: 8),
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: Color(0xFF0D1117),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Color(0xFF30363D), width: 1),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.remove, color: Colors.grey[400], size: 20),
-                onPressed: value > min ? () => onChanged(value - 1) : null,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(),
-              ),
-              Expanded(
-                child: Text(
-                  value.toString(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white, fontSize: 14),
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.add, color: Colors.grey[400], size: 20),
-                onPressed: value < max ? () => onChanged(value + 1) : null,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildPayRateInput() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -979,7 +981,7 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           children: [
             Expanded(
               child: TextFormField(
-                initialValue: _payRate > 0 ? _payRate.toString() : '',
+                controller: _payRateController,
                 keyboardType: TextInputType.numberWithOptions(decimal: true),
                 style: TextStyle(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
@@ -1003,14 +1005,6 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                   prefixText: '\$ ',
                   prefixStyle: TextStyle(color: Colors.grey[400]),
                 ),
-                onChanged: (value) {
-                  final parsed = double.tryParse(value);
-                  if (parsed != null) {
-                    setState(() {
-                      _payRate = parsed;
-                    });
-                  }
-                },
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'El pago es requerido';
@@ -1411,8 +1405,12 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
         Row(
           children: [
             Checkbox(
-              value: true,
-              onChanged: null,
+              value: _enableConfirmationWindow,
+              onChanged: (value) {
+                setState(() {
+                  _enableConfirmationWindow = value ?? false;
+                });
+              },
               activeColor: Colors.blue[600],
               checkColor: Colors.white,
             ),
@@ -1435,13 +1433,63 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
             fontSize: 11,
           ),
         ),
-        SizedBox(height: 12),
-        _buildNumberInput(
-          'Horas',
-          _confirmationWindowHours,
-          (value) => setState(() => _confirmationWindowHours = value),
-          min: 1,
-          max: 168,
+        if (_enableConfirmationWindow) ...[
+          SizedBox(height: 12),
+          _buildNumberInput(
+            'Horas',
+            _confirmationWindowHours,
+            (value) => setState(() => _confirmationWindowHours = value),
+            min: 1,
+            max: 168,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNumberInput(String label, int value, Function(int) onChanged, {int min = 1, int max = 100}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey[400],
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 8),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Color(0xFF0D1117),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Color(0xFF30363D), width: 1),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: Icon(Icons.remove, color: Colors.grey[400], size: 20),
+                onPressed: value > min ? () => onChanged(value - 1) : null,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
+              ),
+              Expanded(
+                child: Text(
+                  value.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.add, color: Colors.grey[400], size: 20),
+                onPressed: value < max ? () => onChanged(value + 1) : null,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -1487,9 +1535,28 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
           ),
           elevation: 0,
         ),
-        body: ApiErrorHandler.buildErrorWidget(
-          message: _errorLoadingData,
-          onRetry: _loadInitialData,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red[400], size: 48),
+              SizedBox(height: 16),
+              Text(
+                _errorLoadingData,
+                style: TextStyle(color: Colors.white, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadInitialData,
+                child: Text('Reintentar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[600],
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -1612,10 +1679,34 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
                       Row(
                         children: [
                           Expanded(
-                            child: _buildNumberInput(
-                              'NÚMERO DE VACANTES',
-                              _numberOfPositions,
-                              (value) => setState(() => _numberOfPositions = value),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'NÚMERO DE VACANTES',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF0D1117),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Color(0xFF30363D), width: 1),
+                                  ),
+                                  child: Text(
+                                    '1',
+                                    style: TextStyle(
+                                      color: Colors.grey[500],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           SizedBox(width: 16),
@@ -1731,13 +1822,5 @@ class _CreatePositionPageState extends State<CreatePositionPage> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _roleNameController.dispose();
-    _customSkillController.dispose();
-    _customEquipmentController.dispose();
-    super.dispose();
   }
 }

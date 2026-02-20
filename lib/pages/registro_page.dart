@@ -57,26 +57,32 @@ class _RegistroPageState extends State<RegistroPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                  
-                  Row(
-                    children: [
-                      Container(
-                        width: isMobile ? 28 : 32,
-                        height: isMobile ? 28 : 32,
-                        decoration: BoxDecoration(
-                          color: Colors.blue[600],
-                          borderRadius: BorderRadius.circular(6),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: isMobile ? 28 : 32,
+                          height: isMobile ? 28 : 32,
+                          decoration: BoxDecoration(
+                            color: Colors.blue[600],
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(Icons.connect_without_contact,
+                              color: Colors.white, size: isMobile ? 16 : 20),
                         ),
-                        child: Icon(Icons.connect_without_contact,
-                            color: Colors.white, size: isMobile ? 16 : 20),
-                      ),
-                      SizedBox(width: 8),
-                      Text('Corte y Queda',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: isMobile ? 16 : 20,
-                              fontWeight: FontWeight.bold)),
-                    ],
+                        SizedBox(width: 8),
+                        Flexible(
+                          child: Text('Corte y Queda',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: isMobile ? 16 : 20,
+                                  fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
                   ),
+                  SizedBox(width: 16),
                   
                   if (!isMobile)
                     Row(
@@ -236,24 +242,31 @@ class _RegistroPageState extends State<RegistroPage> {
               child: isMobile
                   ? Column(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 4,
                           children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: Colors.green[400],
-                                shape: BoxShape.circle,
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: Colors.green[400],
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Text('SISTEMA OPERATIVO',
+                                    style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold)),
+                              ],
                             ),
-                            SizedBox(width: 6),
-                            Text('SISTEMA OPERATIVO',
-                                style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold)),
-                            SizedBox(width: 12),
                             Text('V4.2.0-ESTABLE',
                                 style: TextStyle(
                                     color: Colors.grey[600], fontSize: 9)),
@@ -336,7 +349,6 @@ class _RegistroPageState extends State<RegistroPage> {
         Future.delayed(Duration(milliseconds: 100), _navigateToNextPage);
       },
       child: Container(
-        height: isMobile ? 240 : 320,
         decoration: BoxDecoration(
           color: Color(0xFF161B22),
           borderRadius: BorderRadius.circular(12),
@@ -391,8 +403,7 @@ class _RegistroPageState extends State<RegistroPage> {
                 ],
               ),
             ),
-            Expanded(
-              child: Container(
+            Container(
                 width: double.infinity,
                 padding: EdgeInsets.all(isMobile ? 16 : 24),
                 child: Column(
@@ -408,8 +419,7 @@ class _RegistroPageState extends State<RegistroPage> {
                       ),
                     ),
                     SizedBox(height: isMobile ? 6 : 12),
-                    Flexible(
-                      child: Text(
+                    Text(
                         description,
                         style: TextStyle(
                           color: Colors.grey[400],
@@ -419,14 +429,12 @@ class _RegistroPageState extends State<RegistroPage> {
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
                   ],
                 ),
               ),
-            ),
           ],
         ),
       ),
     );
   }
-}
+} 

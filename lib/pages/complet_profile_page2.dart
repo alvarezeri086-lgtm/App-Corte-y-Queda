@@ -84,71 +84,83 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
     }
 
     try {
-      final resultados = await Future.wait([
-        http.get(
-          Uri.parse('$urlBase/job-roles/'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-        http.get(
-          Uri.parse('$urlBase/tags/'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-        http.get(
-          Uri.parse('$urlBase/equipment/'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-      ]).timeout(Duration(seconds: 30));
-
-      final respuestaRoles = resultados[0];
-      final respuestaHabilidades = resultados[1];
-      final respuestaEquipos = resultados[2];
+      print('📥 Cargando catálogo...');
+      
+      final respuesta = await http.get(
+        Uri.parse('$urlBase/job-roles/with-children'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      ).timeout(Duration(seconds: 30));
 
       if (!mounted) return;
 
-      setState(() {
-        if (respuestaRoles.statusCode == 200) {
-          final datosRoles = jsonDecode(respuestaRoles.body);
-          if (datosRoles is List) {
-            _rolesDisponibles =
-                datosRoles.map((item) => item as Map<String, dynamic>).toList();
+      if (respuesta.statusCode == 200) {
+        final datosRoles = jsonDecode(respuesta.body);
+        
+        List<Map<String, dynamic>> roles = [];
+        List<Map<String, dynamic>> tags = [];
+        List<Map<String, dynamic>> equipos = [];
+
+        if (datosRoles is List) {
+          for (var rol in datosRoles) {
+            final rolMap = rol as Map<String, dynamic>;
+            // Guardar estructura completa
+            roles.add({
+              'id': rolMap['id'].toString(),
+              'name': rolMap['name']?.toString() ?? 'Sin nombre',
+              'description': rolMap['description']?.toString(),
+            });
+            print('✅ ${rolMap['name']}');
+
+            // Extraer tags del rol
+            if (rolMap['tags'] is List) {
+              for (var tag in rolMap['tags']) {
+                final tagMap = tag as Map<String, dynamic>;
+                // Evitar duplicados
+                if (!tags.any((t) => t['id'] == tagMap['id'])) {
+                  tags.add(tagMap);
+                }
+              }
+            }
+
+            // Extraer equipos del rol
+            if (rolMap['equipment'] is List) {
+              for (var equipo in rolMap['equipment']) {
+                final equipoMap = equipo as Map<String, dynamic>;
+                // Evitar duplicados
+                if (!equipos.any((e) => e['id'] == equipoMap['id'])) {
+                  equipos.add(equipoMap);
+                }
+              }
+            }
           }
         }
 
-        if (respuestaHabilidades.statusCode == 200) {
-          final datosHabilidades = jsonDecode(respuestaHabilidades.body);
-          if (datosHabilidades is List) {
-            _habilidadesDisponibles = datosHabilidades
-                .map((item) => item as Map<String, dynamic>)
-                .toList();
-          }
+        setState(() {
+          _rolesDisponibles = roles;
+          _habilidadesDisponibles = tags;
+          _equiposDisponibles = equipos;
+          _cargando = false;
+          print('✅ Catálogo cargado');
+        });
+      } else {
+        print('❌ Error cargando catálogo');
+        setState(() {
+          _cargando = false;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al cargar datos del servidor')),
+          );
         }
-
-        if (respuestaEquipos.statusCode == 200) {
-          final datosEquipos = jsonDecode(respuestaEquipos.body);
-          if (datosEquipos is List) {
-            _equiposDisponibles = datosEquipos
-                .map((item) => item as Map<String, dynamic>)
-                .toList();
-          }
-        }
-
-        _cargando = false;
-      });
+      }
 
     } catch (e) {
-      print('ERROR al cargar datos: $e');
+      print('❌ Error de conexión');
       if (!mounted) return;
       setState(() {
         _cargando = false;
@@ -159,126 +171,6 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
           SnackBar(content: Text('Error al cargar datos del servidor')),
         );
       }
-    }
-  }
-
-  Future<void> _crearRol(String nombre) async {
-    final urlBase = dotenv.env['API_BASE_URL'];
-    if (urlBase == null) return;
-
-    final proveedorAuth = Provider.of<AuthProvider>(context, listen: false);
-    final token = proveedorAuth.accessToken;
-    if (token == null) return;
-
-    try {
-      final respuesta = await http.post(
-        Uri.parse('$urlBase/job-roles/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'name': nombre}),
-      );
-
-      if (respuesta.statusCode == 200) {
-        final nuevoRol = jsonDecode(respuesta.body);
-        setState(() {
-          _rolesDisponibles.add(nuevoRol);
-          _rolSeleccionadoId = nuevoRol['id'];
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Rol creado exitosamente')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al crear rol')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error de conexión')),
-      );
-    }
-  }
-
-  Future<void> _crearHabilidad(String nombre) async {
-    final urlBase = dotenv.env['API_BASE_URL'];
-    if (urlBase == null) return;
-
-    final proveedorAuth = Provider.of<AuthProvider>(context, listen: false);
-    final token = proveedorAuth.accessToken;
-    if (token == null) return;
-
-    try {
-      final respuesta = await http.post(
-        Uri.parse('$urlBase/tags/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'name': nombre}),
-      );
-
-      if (respuesta.statusCode == 200) {
-        final nuevaHabilidad = jsonDecode(respuesta.body);
-        setState(() {
-          _habilidadesDisponibles.add(nuevaHabilidad);
-          _agregarHabilidad(nuevaHabilidad['id'], nuevaHabilidad['name']);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Habilidad creada exitosamente')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al crear habilidad')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error de conexión')),
-      );
-    }
-  }
-
-  Future<void> _crearEquipo(String nombre) async {
-    final urlBase = dotenv.env['API_BASE_URL'];
-    if (urlBase == null) return;
-
-    final proveedorAuth = Provider.of<AuthProvider>(context, listen: false);
-    final token = proveedorAuth.accessToken;
-    if (token == null) return;
-
-    try {
-      final respuesta = await http.post(
-        Uri.parse('$urlBase/equipment/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'name': nombre}),
-      );
-
-      if (respuesta.statusCode == 200) {
-        final nuevoEquipo = jsonDecode(respuesta.body);
-        setState(() {
-          _equiposDisponibles.add(nuevoEquipo);
-          _equipoSeleccionadoId = nuevoEquipo['id'];
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Equipo creado exitosamente')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al crear equipo')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error de conexión')),
-      );
     }
   }
 
@@ -296,18 +188,10 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
     });
   }
 
-  void _agregarHabilidadManual() async {
-    if (_nombreHabilidadController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Por favor ingresa una habilidad')),
-      );
-      return;
-    }
-
-    final nombreHabilidad = _nombreHabilidadController.text.trim();
-    _nombreHabilidadController.clear();
-
-    await _crearHabilidad(nombreHabilidad);
+  void _agregarHabilidadManual() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Por favor selecciona una habilidad de la lista disponible')),
+    );
   }
 
   void _quitarHabilidad(int indice) {
@@ -317,60 +201,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
     });
   }
 
-  void _agregarRol() async {
-    if (_rolesDisponibles.isEmpty ||
-        (_nombreRolController.text.trim().isNotEmpty &&
-            _rolSeleccionadoId == null)) {
-      if (_nombreRolController.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Por favor ingresa el nombre del rol')),
-        );
-        return;
-      }
-
-      final anios = int.tryParse(_aniosRolController.text);
-      final nivel = int.tryParse(_nivelRolController.text);
-
-      if (anios == null || nivel == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Por favor ingresa años y nivel válidos')),
-        );
-        return;
-      }
-
-      if (nivel < 1 || nivel > 5) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('El nivel debe estar entre 1 y 5')),
-        );
-        return;
-      }
-
-      final nombreRol = _nombreRolController.text.trim();
-      await _crearRol(nombreRol);
-
-      if (_rolSeleccionadoId != null) {
-        setState(() {
-          _rolesSeleccionados.add({
-            'job_role_id': _rolSeleccionadoId!,
-            'years': anios,
-            'level': nivel,
-          });
-
-          _rolesUsuario.add({
-            'name': nombreRol,
-            'years': anios,
-            'level': nivel,
-          });
-
-          _nombreRolController.clear();
-          _aniosRolController.clear();
-          _nivelRolController.clear();
-          _rolSeleccionadoId = null;
-        });
-      }
-
-      return;
-    }
+  void _agregarRol() {
 
     if (_rolSeleccionadoId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -440,52 +271,7 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
       return;
     }
 
-    if (_equiposDisponibles.isEmpty ||
-        (_nombreEquipoController.text.trim().isNotEmpty &&
-            _equipoSeleccionadoId == null)) {
-      if (_nombreEquipoController.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Por favor ingresa el nombre del equipo')),
-        );
-        return;
-      }
 
-      final nombreEquipo = _nombreEquipoController.text.trim();
-
-      await _crearEquipo(nombreEquipo);
-
-      if (_equipoSeleccionadoId != null) {
-        setState(() {
-          _equiposSeleccionados.add({
-            'equipment_item_id': _equipoSeleccionadoId!,
-            'quantity': cantidad,
-            'notes': _notasEquipoController.text.trim(),
-            'has_requirement': _poseoEquipo,
-            'is_experienced': _tengoExperiencia,
-            'experience_years': aniosExperiencia,
-          });
-
-          _equiposUsuario.add({
-            'name': nombreEquipo,
-            'quantity': cantidad,
-            'notes': _notasEquipoController.text.trim(),
-            'has_requirement': _poseoEquipo,
-            'is_experienced': _tengoExperiencia,
-            'experience_years': aniosExperiencia,
-          });
-
-          _nombreEquipoController.clear();
-          _cantidadEquipoController.clear();
-          _notasEquipoController.clear();
-          _experienciaEquipoController.clear();
-          _poseoEquipo = false;
-          _tengoExperiencia = false;
-          _equipoSeleccionadoId = null;
-        });
-      }
-
-      return;
-    }
 
     if (_equipoSeleccionadoId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -598,12 +384,8 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
       }
 
       if (respuesta.statusCode == 200) {
-        try {
-          final datosRespuesta = jsonDecode(respuesta.body);
-        } catch (e) {
-          print('Error al parsear respuesta: $e');
-        }
-
+        print('✅ Perfil guardado');
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('¡Perfil guardado exitosamente!'),
@@ -614,39 +396,31 @@ class _CompleteProfilePage2State extends State<CompleteProfilePage2> {
 
         await Future.delayed(Duration(milliseconds: 1500));
 
-        await proveedorAuth.refreshFreelancerProfile();
-
-        await Future.delayed(Duration(milliseconds: 1000));
-
-        final userInfo = proveedorAuth.userInfo;
-
-        if (proveedorAuth.isFullProfileComplete) {
-          Navigator.pushReplacementNamed(context, '/freelancer_dashboard');
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  'Perfil guardado, pero aún faltan datos. Actualizando...'),
-              backgroundColor: Colors.orange[600],
-              duration: Duration(seconds: 4),
-            ),
-          );
-
-          await Future.delayed(Duration(seconds: 2));
+        // Refrescar el perfil del usuario
+        print('🔄 Refrescando perfil del usuario...');
+        try {
           await proveedorAuth.refreshFreelancerProfile();
+          print('✅ Perfil refrescado');
+        } catch (e) {
+          print('⚠️ Error al refrescar: $e');
+        }
 
-          if (proveedorAuth.isFullProfileComplete) {
-            Navigator.pushReplacementNamed(context, '/freelancer_dashboard');
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'Error: No se pudieron cargar los datos. Intenta cerrar sesión y volver a iniciar.'),
-                backgroundColor: Colors.red[600],
-                duration: Duration(seconds: 5),
-              ),
-            );
-          }
+        await Future.delayed(Duration(milliseconds: 500));
+
+        print('✅ Navegando a pantalla de documentos');
+        print('📍 Context mounted: ${mounted}');
+        
+        // Navegar directamente a documentos, sin depender de isFullProfileComplete
+        if (mounted) {
+          print('🚀 Ejecutando navegación...');
+          Navigator.pushReplacementNamed(context, '/upload_documents')
+              .then((result) {
+            print('✅ Navegación completada');
+          }).catchError((error) {
+            print('❌ Error en navegación: $error');
+          });
+        } else {
+          print('❌ Context is not mounted!');
         }
       } else {
         String mensajeError =

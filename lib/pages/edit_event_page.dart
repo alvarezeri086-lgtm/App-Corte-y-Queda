@@ -326,6 +326,7 @@ class _EditEventPageState extends State<EditEventPage> {
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 900;
+    final isSmallMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       backgroundColor: Color(0xFF0D1117),
@@ -415,13 +416,23 @@ class _EditEventPageState extends State<EditEventPage> {
                             ),
                             SizedBox(height: 20),
 
-                            Row(
-                              children: [
-                                Expanded(child: _buildDateField('Fecha de Inicio', _startDate, () => _selectStartDate(context))),
-                                SizedBox(width: 16),
-                                Expanded(child: _buildDateField('Fecha de Fin', _endDate, () => _selectEndDate(context))),
-                              ],
-                            ),
+                            if (isSmallMobile)
+                              Column(
+                                children: [
+                                  _buildDateField('Fecha de Inicio', _startDate, () => _selectStartDate(context)),
+                                  SizedBox(height: 16),
+                                  _buildDateField('Fecha de Fin', _endDate, () => _selectEndDate(context)),
+                                ],
+                              )
+                            else
+                              Row(
+                                children: [
+                                  Expanded(child: _buildDateField('Fecha de Inicio', _startDate, () => _selectStartDate(context))),
+                                  SizedBox(width: 16),
+                                  Expanded(child: _buildDateField('Fecha de Fin', _endDate, () => _selectEndDate(context))),
+                                ],
+                              ),
+                            
                             SizedBox(height: 20),
 
                             Text('Descripción', style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold)),
@@ -453,13 +464,13 @@ class _EditEventPageState extends State<EditEventPage> {
                             ),
                             SizedBox(height: 20),
 
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
+                            if (isSmallMobile)
+                              Column(
+                                children: [
+                                  Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text('Términos de Pago', style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold)),
+                                      Text('Dias de Pago', style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold)),
                                       SizedBox(height: 8),
                                       TextFormField(
                                         controller: _paymentTermsController,
@@ -487,10 +498,8 @@ class _EditEventPageState extends State<EditEventPage> {
                                       ),
                                     ],
                                   ),
-                                ),
-                                SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
+                                  SizedBox(height: 16),
+                                  Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text('Estado', style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold)),
@@ -525,9 +534,84 @@ class _EditEventPageState extends State<EditEventPage> {
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              )
+                            else
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Dias de Pago', style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold)),
+                                        SizedBox(height: 8),
+                                        TextFormField(
+                                          controller: _paymentTermsController,
+                                          style: TextStyle(color: Colors.white, fontSize: 14),
+                                          decoration: InputDecoration(
+                                            hintText: '1 Día',
+                                            hintStyle: TextStyle(color: Colors.grey[600]),
+                                            fillColor: Color(0xFF0D1117),
+                                            filled: true,
+                                            contentPadding: EdgeInsets.all(12),
+                                            border: OutlineInputBorder(
+                                              borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderSide: BorderSide(color: Color(0xFF30363D), width: 1),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderSide: BorderSide(color: Colors.blue[600]!, width: 1),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                          ),
+                                          validator: (value) => value == null || value.trim().isEmpty ? 'Requerido' : null,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Estado', style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold)),
+                                        SizedBox(height: 8),
+                                        Container(
+                                          padding: EdgeInsets.symmetric(horizontal: 12),
+                                          decoration: BoxDecoration(
+                                            color: Color(0xFF0D1117),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: Color(0xFF30363D), width: 1),
+                                          ),
+                                          child: DropdownButtonHideUnderline(
+                                            child: DropdownButton<String>(
+                                              isExpanded: true,
+                                              value: _selectedStatus,
+                                              dropdownColor: Color(0xFF161B22),
+                                              style: TextStyle(color: Colors.white),
+                                              icon: Icon(Icons.arrow_drop_down, color: Colors.grey[500]),
+                                              items: _statusOptions.map((status) {
+                                                return DropdownMenuItem<String>(
+                                                  value: status['value'],
+                                                  child: Text(status['label']!),
+                                                );
+                                              }).toList(),
+                                              onChanged: (value) {
+                                                setState(() {
+                                                  _selectedStatus = value!;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             SizedBox(height: 20),
 
                             Text('VALIDACIONES', style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.bold)),

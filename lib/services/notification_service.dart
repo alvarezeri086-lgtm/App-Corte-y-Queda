@@ -69,7 +69,7 @@ class NotificationService {
     
     try {
       // Solicitar permisos
-      final settings = await _firebaseMessaging!.requestPermission(
+      await _firebaseMessaging!.requestPermission(
         alert: true,
         badge: true,
         sound: true,
@@ -80,7 +80,7 @@ class NotificationService {
       );
       
       // Obtener token
-      final token = await _getFCMToken();
+      await _getFCMToken();
       
       // Registrar handler de background
       FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
@@ -344,22 +344,6 @@ class NotificationService {
       */
     } catch (e) {
       print('Error cargando notificaciones almacenadas: $e');
-    }
-  }
-  
-  Future<void> _saveNotifications() async {
-    try {
-      // Aquí guardarías notificaciones en almacenamiento local
-      // Ejemplo con SharedPreferences:
-      /*
-      final prefs = await SharedPreferences.getInstance();
-      final notificationsJson = _notifications
-          .map((notification) => jsonEncode(notification.toJson()))
-          .toList();
-      await prefs.setStringList('notifications', notificationsJson);
-      */
-    } catch (e) {
-      print('Error guardando notificaciones: $e');
     }
   }
   

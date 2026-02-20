@@ -17,7 +17,6 @@ class CompleteProfilePage extends StatefulWidget {
 
 class _CompleteProfilePageState extends State<CompleteProfilePage> {
   final _bioController = TextEditingController();
-  final _yearsExperienceController = TextEditingController();
   final _rfcController = TextEditingController();
   final _locationController = TextEditingController();
   double _yearsExperience = 1;

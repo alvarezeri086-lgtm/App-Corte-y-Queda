@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import '../auth_provider.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/error_handler.dart';
 
 class ActivationsPage extends StatefulWidget {
@@ -45,84 +44,58 @@ class _ActivationsPageState extends State<ActivationsPage> {
     });
 
     try {
-      final positionsResponse = await http.get(
-        Uri.parse('$baseUrl/positions/'),
+      // Cargar desde /events/positions que devuelve eventos con posiciones
+      final evPosResponse = await http.get(
+        Uri.parse('$baseUrl/events/positions'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
       ).timeout(Duration(seconds: 15));
 
-      if (!positionsResponse.isSuccess) {
-        throw Exception(positionsResponse.friendlyErrorMessage);
+      if (!evPosResponse.isSuccess) {
+        throw Exception('Error ${evPosResponse.statusCode}');
       }
 
-      final positionsData = jsonDecode(positionsResponse.body);
-      List<dynamic> positionsList = positionsData is List
-          ? positionsData
-          : (positionsData['items'] ?? positionsData['data'] ?? []);
+      final respData = jsonDecode(evPosResponse.body);
+      List<dynamic> eventsWithPositions = respData is List ? respData : (respData['items'] ?? respData['data'] ?? []);
 
-      Map<String, List<Map<String, dynamic>>> eventPositionsMap = {};
-      Set<String> eventIds = {};
-
-      for (var position in positionsList) {
-        final eventId = position['event_id']?.toString();
-        if (eventId == null || eventId.isEmpty) continue;
-
-        eventIds.add(eventId);
-
-        final processedPosition = _processPosition(position);
-
-        if (!eventPositionsMap.containsKey(eventId)) {
-          eventPositionsMap[eventId] = [];
-        }
-        eventPositionsMap[eventId]!.add(processedPosition);
+      if (eventsWithPositions.isEmpty) {
+        setState(() {
+          _events = [];
+          _isLoading = false;
+        });
+        return;
       }
 
       List<Map<String, dynamic>> processedEvents = [];
 
-      for (var eventId in eventIds) {
+      // Procesar eventos desde /events/positions
+      for (var eventPosData in eventsWithPositions) {
         try {
-          final eventResponse = await http.get(
-            Uri.parse('$baseUrl/events/$eventId'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Accept': 'application/json',
-            },
-          ).timeout(Duration(seconds: 15));
+          final eventId = eventPosData['event_id']?.toString();
+          if (eventId == null || eventId.isEmpty) continue;
 
-          String eventTitle = 'Evento $eventId';
-          Map<String, dynamic> eventData = {};
+          // Obtener posiciones del campo event_positions
+          List<dynamic> positionsList = eventPosData['event_positions'] ?? [];
 
-          if (eventResponse.isSuccess) {
-            eventData = jsonDecode(eventResponse.body);
-            eventTitle = eventData['title']?.toString() ??
-                eventData['name']?.toString() ??
-                'Evento sin nombre';
-          } else {
-            // Error silencioso o log de error crítico si es necesario
+          // Procesar posiciones
+          List<Map<String, dynamic>> positions = [];
+          for (var pos in positionsList) {
+            positions.add(_processPosition(pos));
           }
 
           processedEvents.add({
             'id': eventId,
-            'title': eventTitle,
-            'organization_id': eventData['organization_id']?.toString() ?? '',
-            'start_date': eventData['start_date']?.toString() ?? '',
-            'end_date': eventData['end_date']?.toString() ?? '',
-            'status': eventData['status']?.toString() ?? '',
-            'positions': eventPositionsMap[eventId] ?? [],
+            'title': eventPosData['name']?.toString() ?? 'Evento sin nombre',
+            'organization_id': eventPosData['organization_id']?.toString() ?? '',
+            'start_date': eventPosData['starts_at']?.toString() ?? '',
+            'end_date': eventPosData['ends_at']?.toString() ?? '',
+            'status': eventPosData['status']?.toString() ?? '',
+            'positions': positions,
           });
         } catch (e) {
-          print('Error cargando evento $eventId: $e');
-          processedEvents.add({
-            'id': eventId,
-            'title': 'Evento ${eventId.substring(0, 8)}...',
-            'organization_id': '',
-            'start_date': '',
-            'end_date': '',
-            'status': '',
-            'positions': eventPositionsMap[eventId] ?? [],
-          });
+          continue;
         }
       }
 
@@ -131,35 +104,63 @@ class _ActivationsPageState extends State<ActivationsPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error en loadEventsWithPositions: $e');
+      String errorMsg = 'Error al cargar activaciones';
+      if (e.toString().contains('Connection refused')) {
+        errorMsg = 'No se puede conectar al servidor';
+      } else if (e.toString().contains('TimeoutException')) {
+        errorMsg = 'Tiempo de espera agotado';
+      }
+
       setState(() {
         _isLoading = false;
-        _errorMessage = ApiErrorHandler.handleNetworkException(e);
+        _errorMessage = errorMsg;
       });
     }
   }
 
   Map<String, dynamic> _processPosition(dynamic position) {
-    final stageOptions = [
-      'LIST_READY',
-      'RED_RECOMMENDED',
-      'RED_KNOWN',
-      'FILLED'
-    ];
+    final candidateCount = _getCandidateCount(position);
+    final confirmedCount = _getConfirmedCount(position);
+    
+    // Usar fill_stage que viene en la respuesta
+    final stage = position['fill_stage']?.toString() ?? 'LIST_READY';
 
-    final randomStage =
-        stageOptions[(position['id']?.hashCode ?? 0) % stageOptions.length];
+    // Parseo seguro para cantidad (evita error si viene como String)
+    final quantityRequired = int.tryParse(position['quantity_required']?.toString() ?? '1') ?? 1;
+
+    // Parseo seguro para tarifa (evita error si viene como String)
+    final payRate = double.tryParse(position['pay_rate']?.toString() ?? '0') ?? 0.0;
 
     return {
-      'id': position['id']?.toString() ?? '',
+      'id': position['position_id']?.toString() ?? position['id']?.toString() ?? '',
       'role_name': position['role_name']?.toString() ?? 'Sin nombre',
-      'quantity_required': position['quantity_required'] ?? 1,
-      'pay_rate': position['pay_rate']?.toDouble() ?? 0.0,
+      'quantity_required': quantityRequired,
+      'pay_rate': payRate,
       'currency': position['currency']?.toString() ?? 'USD',
       'event_id': position['event_id']?.toString() ?? '',
       'organization_id': position['organization_id']?.toString() ?? '',
-      'fill_stage': randomStage,
+      'fill_stage': stage,
+      'candidate_count': candidateCount,
+      'confirmed_count': confirmedCount,
+      'candidates': position['candidates'] ?? [],
+      'confirmed_freelancers': position['confirmed_freelancers'] ?? [],
     };
+  }
+
+  int _getCandidateCount(dynamic position) {
+    final candidates = position['candidates'];
+    if (candidates is List) {
+      return candidates.length;
+    }
+    return 0;
+  }
+
+  int _getConfirmedCount(dynamic position) {
+    final confirmed = position['confirmed_freelancers'];
+    if (confirmed is List) {
+      return confirmed.length;
+    }
+    return 0;
   }
 
   List<Map<String, dynamic>> get _filteredEvents {
@@ -493,10 +494,10 @@ class _ActivationsPageState extends State<ActivationsPage> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
-      final positionId = position['id'];
-      final organizationId = position['organization_id']?.toString().isNotEmpty == true
-          ? position['organization_id']
-          : event['organization_id'] ?? authProvider.userInfo?['organization']?['id'] ?? '';
+        final positionId = (position['position_id'] ?? position['id'])?.toString() ?? '';
+        final organizationId = (position['organization_id'] != null && position['organization_id'].toString().isNotEmpty)
+          ? position['organization_id'].toString()
+          : (event['organization_id']?.toString() ?? authProvider.userInfo?['organization']?['id'] ?? '');
 
       final args = {
         'positionId': positionId,

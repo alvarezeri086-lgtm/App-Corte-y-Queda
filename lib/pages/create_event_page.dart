@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../auth_provider.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
-import '../utils/error_handler.dart';
 
 class CreateEventPage extends StatefulWidget {
   final VoidCallback? onEventCreated;

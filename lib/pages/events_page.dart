@@ -9,10 +9,8 @@ import 'package:intl/intl.dart';
 import 'create_event_page.dart';
 import 'events_details_page.dart';
 import 'edit_event_page.dart';
-import 'create_posicion_page.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/error_handler.dart';
-import '../providers/notification_provider.dart'; // Asegúrate de que esta ruta sea correcta
+import '../providers/notification_provider.dart'; 
 import '../models/notification_model.dart';
 
 class EventsPage extends StatefulWidget {
@@ -112,7 +110,7 @@ class _EventsPageState extends State<EventsPage> {
     setState(() {
       _filteredEvents = _events.where((event) {
         final Map<String, dynamic> eventData =
-            event is Map<String, dynamic> ? event : {};
+            event is Map ? Map<String, dynamic>.from(event) : {};
         final String title = eventData['title']?.toString().toLowerCase() ?? '';
         final String description =
             eventData['description']?.toString().toLowerCase() ?? '';
@@ -153,48 +151,6 @@ class _EventsPageState extends State<EventsPage> {
         builder: (context) => CreateEventPage(onEventCreated: _loadEvents),
       ),
     );
-  }
-
-  Future<void> _logout() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF161B22),
-        title: Text(
-          'Cerrar sesión',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          '¿Estás seguro de que quieres cerrar sesión?',
-          style: TextStyle(color: Colors.grey[400]),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancelar',
-              style: TextStyle(color: Colors.grey[400]),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              'Cerrar sesión',
-              style: TextStyle(color: Colors.red[400]),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final storage = FlutterSecureStorage();
-      await storage.deleteAll();
-      await authProvider.logout();
-      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-    }
   }
 
   Widget _buildSearchAndFilters() {
@@ -896,9 +852,6 @@ class _EventsPageState extends State<EventsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final userData = authProvider.userInfo;
-    
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
@@ -1098,8 +1051,8 @@ class _EventsPageState extends State<EventsPage> {
                         else
                           Column(
                             children: _filteredEvents.map<Widget>((event) {
-                              if (event is Map<String, dynamic>) {
-                                return _buildEventCard(event);
+                              if (event is Map) {
+                                return _buildEventCard(Map<String, dynamic>.from(event));
                               }
                               return SizedBox.shrink();
                             }).toList(),
